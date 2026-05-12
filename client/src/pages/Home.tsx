@@ -122,6 +122,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const [emotion, setEmotion] = useState('')
   const [scene, setScene] = useState('')
   const [ageGroup, setAgeGroup] = useState('6')
+  const [pageCount, setPageCount] = useState(10)
   const [description, setDescription] = useState('')
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
@@ -144,7 +145,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const handleGenerate = async () => {
     if (!emotion || !scene || !ageGroup) { setError('请选择情绪、场景和年龄段'); return }
     setError(null); setGenerating(true)
-    const input = { emotion, scene, ageGroup, description }
+    const input = { emotion, scene, ageGroup, description, pageCount }
     try {
       setGenStep('正在分析情绪...')
       const guideRes = await fetch('/api/trouble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
@@ -216,6 +217,15 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
               <textarea value={description} onChange={(e) => setDescription(e.target.value)}
                 placeholder="描述孩子的具体情况，帮助生成更贴心的故事..."
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">绘本页数</label>
+              <input
+                type="number" min={4} max={20}
+                value={pageCount}
+                onChange={(e) => setPageCount(Number(e.target.value))}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300"
+              />
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-medium py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm">取消</button>

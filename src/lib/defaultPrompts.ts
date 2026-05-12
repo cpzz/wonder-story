@@ -14,10 +14,10 @@ export const DEFAULT_STORY_TEMPLATE: TemplateBase = {
 - 主角是一个与孩子年龄相近的可爱角色（小动物或小朋友）
 - 故事情节自然流畅，有清晰的开始、发展和结局
 - 结局积极向上，帮助孩子建立自信
-- 每页文字简短精炼，适合朗读（2-3句话）
-- 故事总共6-8页`,
+- 每页文字简短精炼，适合朗读（2-3句话）`,
+
   userPromptTemplate: `请为一个{ageGroup}岁的孩子创作一个关于"{emotion}"情绪的温暖绘本故事。
-故事主要场景在{scene}。
+故事主要场景在{scene}。故事共{pageCount}页。
 {description}
 请以JSON格式返回（只返回JSON，不要其他内容）：
 {

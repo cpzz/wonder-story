@@ -69,6 +69,7 @@ export interface TroubleInput {
   scene: string
   ageGroup: string
   description?: string
+  pageCount?: number
 }
 
 export interface StoryPage {

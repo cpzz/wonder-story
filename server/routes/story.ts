@@ -9,14 +9,14 @@ const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description = '' }: TroubleInput = req.body
+    const { emotion, scene, ageGroup, description = '', pageCount = 10 }: TroubleInput = req.body
     if (!emotion || !scene || !ageGroup) {
       return res.status(400).json({ error: '缺少必填字段: emotion, scene, ageGroup' })
     }
     const template = getPromptByType('story') ?? { ...DEFAULT_STORY_TEMPLATE, id: 'default' }
     const story = await generateJSON<Story>(
       template.systemPrompt,
-      fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description }),
+      fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description, pageCount: String(pageCount) }),
     )
     res.json(story)
   } catch (err) {

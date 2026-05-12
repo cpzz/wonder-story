@@ -19,8 +19,13 @@ function createClientFromKey(apiKey: APIKey): OpenAI {
 }
 
 function cleanJSON(content: string): string {
-  const match = content.match(/```(?:json)?\s*([\s\S]*?)```/)
-  return match ? match[1].trim() : content.trim()
+  // Strip markdown code fences
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fenced) return fenced[1].trim()
+  // Extract first {...} or [...] block
+  const obj = content.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
+  if (obj) return obj[1].trim()
+  return content.trim()
 }
 
 export async function generateJSON<T>(
@@ -37,9 +42,8 @@ export async function generateJSON<T>(
   const client = createClientFromKey(keyConfig)
   const response = await client.chat.completions.create({
     model: keyConfig.model,
-    response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPrompt + '\n\n请只返回 JSON，不要任何其他文字或 markdown 代码块。' },
       { role: 'user', content: userPrompt },
     ],
   })

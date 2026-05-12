@@ -1,33 +1,59 @@
+import fs from 'fs'
+import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import { readJson, writeJson } from './storage'
 import type { BookItem } from '@/types'
 
-const FILENAME = 'books.json'
+const USR_DIR = path.join(process.cwd(), 'usr')
+
+function ensureUsrDir(): void {
+  if (!fs.existsSync(USR_DIR)) fs.mkdirSync(USR_DIR, { recursive: true })
+}
+
+function bookDir(id: string): string {
+  return path.join(USR_DIR, id)
+}
+
+function bookFile(id: string): string {
+  return path.join(bookDir(id), 'index.json')
+}
 
 export function getBooks(): BookItem[] {
-  return readJson<BookItem[]>(FILENAME, [])
+  ensureUsrDir()
+  const entries = fs.readdirSync(USR_DIR, { withFileTypes: true })
+  const books: BookItem[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const file = bookFile(entry.name)
+    if (!fs.existsSync(file)) continue
+    try {
+      books.push(JSON.parse(fs.readFileSync(file, 'utf-8')) as BookItem)
+    } catch {}
+  }
+  return books.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
 export function getBookById(id: string): BookItem | undefined {
-  return getBooks().find((b) => b.id === id)
+  const file = bookFile(id)
+  if (!fs.existsSync(file)) return undefined
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8')) as BookItem
+  } catch {
+    return undefined
+  }
 }
 
 export function saveBook(data: Omit<BookItem, 'id' | 'createdAt'>): BookItem {
-  const books = getBooks()
-  const book: BookItem = {
-    ...data,
-    id: uuidv4(),
-    createdAt: new Date().toISOString(),
-  }
-  books.unshift(book) // newest first
-  writeJson(FILENAME, books)
+  const id = uuidv4()
+  const book: BookItem = { ...data, id, createdAt: new Date().toISOString() }
+  const dir = bookDir(id)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(bookFile(id), JSON.stringify(book, null, 2), 'utf-8')
   return book
 }
 
 export function deleteBook(id: string): boolean {
-  const books = getBooks()
-  const filtered = books.filter((b) => b.id !== id)
-  if (filtered.length === books.length) return false
-  writeJson(FILENAME, filtered)
+  const dir = bookDir(id)
+  if (!fs.existsSync(dir)) return false
+  fs.rmSync(dir, { recursive: true, force: true })
   return true
 }

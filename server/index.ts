@@ -8,6 +8,7 @@ import pictureBookRouter from './routes/pictureBook'
 import adminApiKeysRouter from './routes/admin/apiKeys'
 import adminLlmSettingsRouter from './routes/admin/llmSettings'
 import adminPromptsRouter from './routes/admin/prompts'
+import llmStatusRouter from './routes/llmStatus'
 
 const app = express()
 app.use(cors())
@@ -18,6 +19,7 @@ app.use('/api/options', optionsRouter)
 app.use('/api/story', storyRouter)
 app.use('/api/trouble', troubleRouter)
 app.use('/api/picture-book', pictureBookRouter)
+app.use('/api/llm-status', llmStatusRouter)
 app.use('/api/admin/api-keys', adminApiKeysRouter)
 app.use('/api/admin/llm-settings', adminLlmSettingsRouter)
 app.use('/api/admin/prompts', adminPromptsRouter)

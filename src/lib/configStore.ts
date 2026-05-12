@@ -132,6 +132,13 @@ export function updateLLMSettings(settings: Partial<LLMSettings>): LLMSettings {
 
 // ── Resolve active LLM key for generation ──
 
+export function getLLMStatus(): { hasStoryLLM: boolean; hasPictureLLM: boolean } {
+  const config = getConfig()
+  const hasStoryLLM = Boolean(config.llmSettings.storyLLMId && getAPIKeyById(config.llmSettings.storyLLMId))
+  const hasPictureLLM = Boolean(config.llmSettings.pictureLLMId && getAPIKeyById(config.llmSettings.pictureLLMId))
+  return { hasStoryLLM, hasPictureLLM }
+}
+
 export function getActiveLLMKey(type: 'story' | 'picture'): APIKey | null {
   const config = getConfig()
   const id =

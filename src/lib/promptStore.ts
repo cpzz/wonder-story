@@ -6,11 +6,20 @@ const FILENAME = 'prompts.json'
 
 export function getPrompts(): PromptTemplate[] {
   const stored = readJson<PromptTemplate[]>(FILENAME, [])
+  const defaults = getDefaultPrompts()
   if (stored.length === 0) {
-    const defaults = getDefaultPrompts()
     writeJson(FILENAME, defaults)
     return defaults
   }
+  // Ensure any missing default types are added (migration)
+  let updated = false
+  for (const def of defaults) {
+    if (!stored.find((p) => p.type === def.type)) {
+      stored.push(def)
+      updated = true
+    }
+  }
+  if (updated) writeJson(FILENAME, stored)
   return stored
 }
 

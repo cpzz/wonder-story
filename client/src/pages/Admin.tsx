@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { APIKeyView, APIKeyInput, LLMSettings, PromptTemplate } from '@/types'
 
-type Tab = 'apikeys' | 'llm' | 'prompts'
+type Tab = 'apikeys' | 'llm'
 type Message = { type: 'success' | 'error'; text: string }
 
 interface APIKeyFormData {
@@ -23,8 +23,15 @@ const PROVIDER_PRESETS = [
   { label: '移动云（cmecloud）', provider: 'cmecloud', model: '', baseURL: 'https://zhenze-huhehaote.cmecloud.cn/v1' },
 ]
 
-export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>('apikeys')
+const PROMPT_SECTIONS = [
+  { type: 'story' as const, label: '情绪故事提示词', desc: '用于情绪故事模式的故事生成' },
+  { type: 'guide' as const, label: '情绪引导提示词', desc: '用于情绪模式的家长引导建议' },
+  { type: 'bedtime-story' as const, label: '睡前故事提示词', desc: '用于睡前模式的故事生成' },
+  { type: 'bedtime-guide' as const, label: '睡前引导提示词', desc: '用于睡前模式的家长引导建议' },
+]
+
+export default function AdminPage({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<Tab>('llm')
   const [message, setMessage] = useState<Message | null>(null)
 
   // ── API Keys ──
@@ -38,11 +45,32 @@ export default function AdminPage() {
   const [llm, setLlm] = useState<LLMSettings>({ storyLLMId: '', pictureLLMId: '' })
   const [llmSaving, setLlmSaving] = useState(false)
 
-  // ── Prompts ──
+  // ── Prompts (simplified) ──
   const [prompts, setPrompts] = useState<PromptTemplate[]>([])
-  const [editingPrompt, setEditingPrompt] = useState<PromptTemplate | null>(null)
-  const [promptForm, setPromptForm] = useState<Omit<PromptTemplate, 'id' | 'createdAt' | 'updatedAt' | 'meta' | 'type'> & { type: string }>({ name: '', type: '', systemPrompt: '', userPromptTemplate: '' })
+  const [editingPromptType, setEditingPromptType] = useState<string | null>(null)
+  const [promptEditForm, setPromptEditForm] = useState({ systemPrompt: '', userPromptTemplate: '' })
   const [promptSaving, setPromptSaving] = useState(false)
+
+  const openEditPromptByType = (type: string, prompt?: PromptTemplate) => {
+    setEditingPromptType(type)
+    setPromptEditForm({ systemPrompt: prompt?.systemPrompt ?? '', userPromptTemplate: prompt?.userPromptTemplate ?? '' })
+  }
+
+  const handleSavePromptByType = async (type: string, existing?: PromptTemplate) => {
+    setPromptSaving(true)
+    try {
+      const sectionLabel = PROMPT_SECTIONS.find((s) => s.type === type)?.label ?? type
+      const res = existing
+        ? await fetch(`/api/admin/prompts/${existing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(promptEditForm) })
+        : await fetch('/api/admin/prompts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: sectionLabel, type, meta: {}, ...promptEditForm }) })
+      if (!res.ok) throw new Error((await res.json()).error)
+      const updated = await fetch('/api/admin/prompts').then((r) => r.json())
+      setPrompts(updated)
+      setEditingPromptType(null)
+      showMsg('success', '提示词已保存')
+    } catch (err) { showMsg('error', err instanceof Error ? err.message : '保存失败') }
+    finally { setPromptSaving(false) }
+  }
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text })
@@ -126,54 +154,50 @@ export default function AdminPage() {
   const imageGenKeys = keys.filter((k) => k.supportsImageGen)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
-        <a href="/" className="text-gray-400 hover:text-gray-600 transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </a>
-        <h1 className="font-bold text-gray-800 text-lg">系统设置</h1>
-      </header>
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-gray-50 rounded-2xl shadow-2xl flex flex-col" style={{ width: '860px', height: '600px' }}>
 
-      {/* Toast */}
-      {message && (
-        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all ${
-          message.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-        }`}>
-          {message.text}
-        </div>
-      )}
+        {/* Header */}
+        <header className="bg-white rounded-t-2xl border-b border-gray-100 px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <h1 className="font-bold text-gray-800 text-lg">系统设置</h1>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
+        </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-8 w-fit">
-          {([['apikeys', 'API Keys'], ['llm', 'LLM 配置'], ['prompts', '提示词模板']] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Toast */}
+        {message && (
+          <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium ${message.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+            {message.text}
+          </div>
+        )}
 
-        {/* ── Tab: API Keys ── */}
-        {tab === 'apikeys' && (
-          <div>
+        {/* Scroll area */}
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+
+          {/* Tabs */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
+            {([['llm', '大模型'], ['apikeys', 'API密钥']] as [Tab, string][]).map(([t, label]) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Tab: API Keys ── */}
+          <div className={tab === 'apikeys' ? '' : 'hidden'}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800">API Key 管理</h2>
               <button onClick={openAddKey} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
                 添加 API Key
               </button>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
               {keys.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击右上角添加</div>
+                <div className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击上方按钮添加</div>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      {['名称', '提供商', '模型', 'Base URL', 'API Key', '图像生成', '操作'].map((h) => (
+                      {['名称', '提供商', '模型', '图像生成', '操作'].map((h) => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -184,10 +208,8 @@ export default function AdminPage() {
                         <td className="px-4 py-3 font-medium text-gray-800">{k.name}</td>
                         <td className="px-4 py-3 text-gray-600">{k.provider || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{k.model || '—'}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs max-w-[160px] truncate" title={k.baseURL}>{k.baseURL || '—'}</td>
-                        <td className="px-4 py-3 font-mono text-gray-500 text-xs">{k.keyMasked}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-block w-2 h-2 rounded-full ${k.supportsImageGen ? 'bg-green-400' : 'bg-gray-300'}`} />
+                          <span className={`text-xs font-medium ${k.supportsImageGen ? 'text-green-500' : 'text-gray-400'}`}>{k.supportsImageGen ? '支持' : '不支持'}</span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
@@ -202,12 +224,9 @@ export default function AdminPage() {
               )}
             </div>
           </div>
-        )}
 
-        {/* ── Tab: LLM Settings ── */}
-        {tab === 'llm' && (
-          <div className="max-w-lg">
-            <h2 className="font-semibold text-gray-800 mb-4">LLM 配置</h2>
+          {/* ── Tab: LLM Settings ── */}
+          <div className={tab === 'llm' ? 'max-w-lg' : 'hidden'}>
             <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
@@ -233,146 +252,72 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
-        )}
 
-        {/* ── Tab: Prompts ── */}
-        {tab === 'prompts' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800">提示词模板</h2>
-              {!editingPrompt && !promptForm.name && (
-                <button onClick={openAddPrompt} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-                  添加模板
-                </button>
-              )}
-            </div>
+        </div>{/* end scroll area */}
 
-            {/* Edit / Add form */}
-            {(editingPrompt !== null || promptForm.name !== '' || promptForm.type !== '') && (
-              <div className="bg-white rounded-xl border border-gray-100 p-6 mb-6 space-y-4">
-                <h3 className="font-semibold text-gray-700 text-sm">{editingPrompt ? '编辑提示词' : '新增提示词'}</h3>
-                <form onSubmit={handleSavePrompt} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">名称</label>
-                      <input value={promptForm.name} onChange={(e) => setPromptForm({ ...promptForm, name: e.target.value })} placeholder="e.g. 故事生成"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">类型</label>
-                      <input value={promptForm.type} onChange={(e) => setPromptForm({ ...promptForm, type: e.target.value })} placeholder="e.g. story"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">系统提示词</label>
-                    <textarea value={promptForm.systemPrompt} onChange={(e) => setPromptForm({ ...promptForm, systemPrompt: e.target.value })} rows={4}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">用户提示词模板</label>
-                    <textarea value={promptForm.userPromptTemplate} onChange={(e) => setPromptForm({ ...promptForm, userPromptTemplate: e.target.value })} rows={5}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none font-mono" />
-                    <p className="text-xs text-gray-400 mt-1">支持 {'{variable}'} 占位符</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={cancelPrompt} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors">取消</button>
-                    <button type="submit" disabled={promptSaving} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
-                      {promptSaving ? '保存中...' : '保存'}
-                    </button>
-                  </div>
-                </form>
+        {/* API Key Modal */}
+        {keyModalOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <h3 className="font-bold text-gray-800">{editingKey ? '编辑 API 密钥' : '添加 API 密钥'}</h3>
+                <button onClick={closeKeyModal} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
               </div>
-            )}
-
-            {/* Prompts list */}
-            <div className="space-y-2">
-              {prompts.length === 0 && !(editingPrompt !== null || promptForm.name !== '') && (
-                <div className="text-center py-12 text-gray-400 text-sm bg-white rounded-xl border border-gray-100">
-                  暂无提示词模板，将使用内置默认模板
+              <form onSubmit={handleKeySubmit} className="px-6 py-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">大模型提供商</label>
+                  <select value={form.provider}
+                    onChange={(e) => {
+                      const preset = PROVIDER_PRESETS.find((p) => p.provider === e.target.value)
+                      if (preset) setForm((f) => ({ ...f, provider: preset.provider, model: preset.model || f.model, baseURL: preset.baseURL || f.baseURL }))
+                      else setForm((f) => ({ ...f, provider: e.target.value }))
+                    }}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                    {PROVIDER_PRESETS.map((p) => (
+                      <option key={p.label} value={p.provider}>{p.label}</option>
+                    ))}
+                  </select>
                 </div>
-              )}
-              {prompts.map((p) => (
-                <div key={p.id} className="bg-white rounded-xl border border-gray-100 px-5 py-4 flex items-center justify-between">
-                  <div>
-                    <span className="font-medium text-gray-800 text-sm">{p.name}</span>
-                    <span className="ml-2 bg-purple-100 text-purple-600 text-xs px-2 py-0.5 rounded-full">{p.type}</span>
-                    <p className="text-xs text-gray-400 mt-0.5">更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button onClick={() => openEditPrompt(p)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">编辑</button>
-                    <button onClick={() => handleDeletePrompt(p.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">删除</button>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">名称 <span className="text-red-400">*</span></label>
+                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 我的 GPT-4o"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" required />
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── API Key Modal ── */}
-      {keyModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800">{editingKey ? '编辑 API Key' : '添加 API Key'}</h3>
-              <button onClick={closeKeyModal} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
-            </div>
-            <form onSubmit={handleKeySubmit} className="px-6 py-5 space-y-4">
-              {/* Provider dropdown */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">LLM 提供商</label>
-                <select
-                  value={form.provider}
-                  onChange={(e) => {
-                    const preset = PROVIDER_PRESETS.find((p) => p.provider === e.target.value)
-                    if (preset) setForm((f) => ({ ...f, provider: preset.provider, model: preset.model || f.model, baseURL: preset.baseURL || f.baseURL }))
-                    else setForm((f) => ({ ...f, provider: e.target.value }))
-                  }}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  {PROVIDER_PRESETS.map((p) => (
-                    <option key={p.label} value={p.provider}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">名称 <span className="text-red-400">*</span></label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 我的 GPT-4o"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" required />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">模型</label>
-                <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder="e.g. gpt-4o"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Base URL</label>
-                <input value={form.baseURL} onChange={(e) => setForm({ ...form, baseURL: e.target.value })} placeholder="https://api.openai.com/v1"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                  API Key
-                  {editingKey && <span className="ml-1 font-normal text-gray-400">（留空则保留原值）</span>}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">模型</label>
+                  <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder="e.g. gpt-4o"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">服务地址</label>
+                  <input value={form.baseURL} onChange={(e) => setForm({ ...form, baseURL: e.target.value })} placeholder="https://api.openai.com/v1"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    API 密钥
+                    {editingKey && <span className="ml-1 font-normal text-gray-400">（留空则保留原值）</span>}
+                  </label>
+                  <input type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="sk-..."
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
+                </div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.supportsImageGen} onChange={(e) => setForm({ ...form, supportsImageGen: e.target.checked })}
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-300" />
+                  <span className="text-sm text-gray-700">支持图像生成</span>
                 </label>
-                <input type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="sk-..."
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
-              </div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.supportsImageGen} onChange={(e) => setForm({ ...form, supportsImageGen: e.target.checked })}
-                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-300" />
-                <span className="text-sm text-gray-700">支持图像生成</span>
-              </label>
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={closeKeyModal} className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl text-sm hover:bg-gray-50 transition-colors">取消</button>
-                <button type="submit" disabled={keySaving} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                  {keySaving ? '保存中...' : '保存'}
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={closeKeyModal} className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl text-sm hover:bg-gray-50 transition-colors">取消</button>
+                  <button type="submit" disabled={keySaving} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
+                    {keySaving ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+      </div>
     </div>
   )
 }

@@ -10,11 +10,11 @@ router.get('/', (_req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description, guide, story, pictureBook } = req.body
-    if (!emotion || !scene || !ageGroup || !guide || !story || !pictureBook) {
+    const { emotion, scene, ageGroup, description, guide, story, pictureBook, mode, theme } = req.body
+    if (!ageGroup || !guide || !story) {
       return res.status(400).json({ error: '缺少必填字段' })
     }
-    const book: BookItem = saveBook({ title: story.title, emotion, scene, ageGroup, description, guide, story, pictureBook })
+    const book: BookItem = saveBook({ title: story.title, emotion: emotion ?? '', scene: scene ?? '', ageGroup, description, guide, story, pictureBook, mode, theme })
     res.status(201).json(book)
   } catch (err) {
     console.error('[POST /api/books]', err)

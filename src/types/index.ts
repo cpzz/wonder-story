@@ -52,7 +52,7 @@ export interface AppConfig {
 export interface PromptTemplate {
   id: string
   name: string
-  type: 'story' | 'image' | 'guide'
+  type: 'story' | 'image' | 'guide' | 'bedtime-story' | 'bedtime-guide'
   meta: {
     emotion?: string
     scene?: string
@@ -70,6 +70,8 @@ export interface TroubleInput {
   ageGroup: string
   description?: string
   pageCount?: number
+  mode?: 'emotion' | 'bedtime'
+  theme?: string
 }
 
 export interface StoryPage {
@@ -108,9 +110,11 @@ export interface BookItem {
   scene: string
   ageGroup: string
   description?: string
+  mode?: 'emotion' | 'bedtime'
+  theme?: string
   guide: Guide
   story: Story
-  pictureBook: PictureBook
+  pictureBook?: PictureBook
   createdAt: string
 }
 
@@ -120,4 +124,5 @@ export interface DropdownOptions {
   emotions: string[]
   scenes: string[]
   ageGroups: string[]
+  themes: string[]
 }

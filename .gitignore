@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.env.local
+.env
+
+# 包含 API Key 及加密密钥，不提交到 Git
+data/config.json
+data/.key

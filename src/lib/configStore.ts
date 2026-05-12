@@ -136,6 +136,10 @@ export function getActiveLLMKey(type: 'story' | 'picture'): APIKey | null {
   const config = getConfig()
   const id =
     type === 'story' ? config.llmSettings.storyLLMId : config.llmSettings.pictureLLMId
-  if (!id) return null
-  return getAPIKeyById(id) ?? null
+  if (id) return getAPIKeyById(id) ?? null
+  // Fallback: if picture LLM not configured, use story LLM
+  if (type === 'picture' && config.llmSettings.storyLLMId) {
+    return getAPIKeyById(config.llmSettings.storyLLMId) ?? null
+  }
+  return null
 }

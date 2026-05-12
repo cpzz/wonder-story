@@ -3,6 +3,10 @@ import { getActiveLLMKey } from './configStore'
 import { decrypt } from './crypto'
 import type { APIKey } from '@/types'
 
+function isDeepSeek(apiKey: APIKey): boolean {
+  return apiKey.provider === 'deepseek'
+}
+
 function createClientFromKey(apiKey: APIKey): OpenAI {
   let plainKey = ''
   try {
@@ -40,13 +44,24 @@ export async function generateJSON<T>(
     )
   }
   const client = createClientFromKey(keyConfig)
-  const response = await client.chat.completions.create({
+
+  const systemContent = isDeepSeek(keyConfig)
+    ? systemPrompt + '\n\n请严格以 JSON 格式返回，不要包含任何其他文字或 markdown。'
+    : systemPrompt + '\n\n请只返回 JSON，不要任何其他文字或 markdown 代码块。'
+
+  const requestParams: Parameters<typeof client.chat.completions.create>[0] = {
     model: keyConfig.model,
     messages: [
-      { role: 'system', content: systemPrompt + '\n\n请只返回 JSON，不要任何其他文字或 markdown 代码块。' },
+      { role: 'system', content: systemContent },
       { role: 'user', content: userPrompt },
     ],
-  })
+    ...(isDeepSeek(keyConfig) && {
+      response_format: { type: 'json_object' },
+      max_tokens: 4096,
+    }),
+  }
+
+  const response = await client.chat.completions.create(requestParams)
   const content = response.choices[0]?.message?.content
   if (!content) throw new Error('LLM 返回了空内容')
   return JSON.parse(cleanJSON(content)) as T

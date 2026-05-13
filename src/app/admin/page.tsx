@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import type { APIKeyView, APIKeyInput, LLMSettings, PromptTemplate } from '@/types'
 
-type Tab = 'settings' | 'prompts'
 type Message = { type: 'success' | 'error'; text: string }
 
 interface APIKeyFormData {
@@ -26,7 +25,6 @@ const PROVIDER_PRESETS = [
 ]
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>('settings')
   const [message, setMessage] = useState<Message | null>(null)
 
   // ── API Keys ──
@@ -149,19 +147,32 @@ export default function AdminPage() {
       )}
 
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-8 w-fit">
-          {([['settings', '大模型设置'], ['prompts', '提示词模板']] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <div className="space-y-8">
+            {/* LLM Settings section */}
+            <div className="max-w-lg">
+              <h2 className="font-semibold text-gray-800 mb-4">大模型配置</h2>
+              <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
+                  <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                    <option value="">-- 选择 API Key --</option>
+                    {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
+                  <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                    <option value="">-- 选择 API Key --</option>
+                    {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
+                </div>
+              </div>
+            </div>
 
-        {/* ── Tab: Settings (API Keys + LLM) ── */}
-        {tab === 'settings' && (
-          <div className="space-y-8">
             {/* API Keys section */}
             <div>
               <div className="flex items-center justify-between mb-4">
@@ -207,39 +218,17 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* LLM Settings section */}
+            {/* Save button */}
             <div className="max-w-lg">
-              <h2 className="font-semibold text-gray-800 mb-4">大模型配置</h2>
-              <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
-                  <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                    <option value="">-- 选择 API Key --</option>
-                    {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
-                  <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                    <option value="">-- 选择 API Key --</option>
-                    {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
-                </div>
-                <button onClick={handleSaveLlm} disabled={llmSaving}
-                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                  {llmSaving ? '保存中...' : '保存配置'}
-                </button>
-              </div>
+              <button onClick={handleSaveLlm} disabled={llmSaving}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
+                {llmSaving ? '保存中...' : '保存配置'}
+              </button>
             </div>
-          </div>
-        )}
-        {/* ── Tab: Prompts ── */}
-        {tab === 'prompts' && (
-          <div>
+        </div>
+
+        {/* ── Prompts ── */}
+        <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-800">提示词模板</h2>
               {!editingPrompt && !promptForm.name && (
@@ -308,8 +297,7 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* ── API Key Modal ── */}

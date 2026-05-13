@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { APIKeyView, APIKeyInput, LLMSettings, PromptTemplate } from '@/types'
 
-type Tab = 'apikeys' | 'llm'
 type Message = { type: 'success' | 'error'; text: string }
 
 interface APIKeyFormData {
@@ -31,8 +30,8 @@ const PROMPT_SECTIONS = [
 ]
 
 export default function AdminPage({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('llm')
   const [message, setMessage] = useState<Message | null>(null)
+  const [adminTab, setAdminTab] = useState<'llm' | 'tts'>('llm')
 
   // ── API Keys ──
   const [keys, setKeys] = useState<APIKeyView[]>([])
@@ -44,6 +43,12 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
   // ── LLM Settings ──
   const [llm, setLlm] = useState<LLMSettings>({ storyLLMId: '', pictureLLMId: '' })
   const [llmSaving, setLlmSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  // ── TTS Voices ──
+  const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [selectedZhVoice, setSelectedZhVoice] = useState(() => localStorage.getItem('wstory_zh_voice') ?? '')
+  const [selectedEnVoice, setSelectedEnVoice] = useState(() => localStorage.getItem('wstory_en_voice') ?? '')
 
   // ── Prompts (simplified) ──
   const [prompts, setPrompts] = useState<PromptTemplate[]>([])
@@ -83,6 +88,13 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
     fetch('/api/admin/prompts').then((r) => r.ok ? r.json() : []).then(setPrompts)
   }, [])
 
+  useEffect(() => {
+    const load = () => setAllVoices(speechSynthesis.getVoices())
+    load()
+    speechSynthesis.addEventListener('voiceschanged', load)
+    return () => speechSynthesis.removeEventListener('voiceschanged', load)
+  }, [])
+
   // ── API Key handlers ──
   const openAddKey = () => { setEditingKey(null); setForm(EMPTY_FORM); setKeyModalOpen(true) }
   const openEditKey = (k: APIKeyView) => { setEditingKey(k); setForm({ name: k.name, provider: k.provider ?? '', model: k.model ?? '', baseURL: k.baseURL ?? '', apiKey: '', supportsImageGen: k.supportsImageGen }); setKeyModalOpen(true) }
@@ -101,6 +113,7 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
       const updated = await fetch('/api/admin/api-keys').then((r) => r.json())
       setKeys(updated)
       closeKeyModal()
+      if (!editingKey) setDirty(true)
       showMsg('success', editingKey ? 'API Key 已更新' : 'API Key 已添加')
     } catch (err) { showMsg('error', err instanceof Error ? err.message : '操作失败') }
     finally { setKeySaving(false) }
@@ -118,6 +131,7 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
     try {
       const res = await fetch('/api/admin/llm-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(llm) })
       if (!res.ok) throw new Error((await res.json()).error)
+      setDirty(false)
       showMsg('success', '设置已保存')
     } catch (err) { showMsg('error', err instanceof Error ? err.message : '保存失败') }
     finally { setLlmSaving(false) }
@@ -152,6 +166,8 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
   }
 
   const imageGenKeys = keys.filter((k) => k.supportsImageGen)
+  const zhVoices = allVoices.filter((v) => v.lang.startsWith('zh'))
+  const enVoices = allVoices.filter((v) => v.lang.startsWith('en'))
 
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -174,26 +190,53 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto px-6 py-6">
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
-            {([['llm', '大模型'], ['apikeys', 'API密钥']] as [Tab, string][]).map(([t, label]) => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              {([['llm', '大模型配置'], ['tts', '朗读设置']] as const).map(([t, label]) => (
+                <button key={t} onClick={() => setAdminTab(t)}
+                  className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${adminTab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button onClick={handleSaveLlm} disabled={llmSaving || !dirty}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2 px-6 rounded-xl transition-colors text-sm">
+              {llmSaving ? '保存中...' : '保存配置'}
+            </button>
           </div>
 
-          {/* ── Tab: API Keys ── */}
-          <div className={tab === 'apikeys' ? '' : 'hidden'}>
-            <div className="flex items-center justify-between mb-4">
-              <button onClick={openAddKey} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-                添加 API Key
-              </button>
+          {adminTab === 'llm' && (
+          <div className="space-y-6">
+            {/* LLM Settings */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
+                <select value={llm.storyLLMId} onChange={(e) => { setLlm({ ...llm, storyLLMId: e.target.value }); setDirty(true) }}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                  <option value="">-- 选择 API Key --</option>
+                  {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
+                <select value={llm.pictureLLMId} onChange={(e) => { setLlm({ ...llm, pictureLLMId: e.target.value }); setDirty(true) }}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                  <option value="">-- 选择 API Key --</option>
+                  {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
+              </div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              {keys.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击上方按钮添加</div>
-              ) : (
+
+            {/* API Keys */}
+            <div>
+              <div className="mb-4">
+                <button onClick={openAddKey} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+                  添加 API Key
+                </button>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
@@ -203,55 +246,93 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {keys.map((k) => (
-                      <tr key={k.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-800">{k.name}</td>
-                        <td className="px-4 py-3 text-gray-600">{k.provider || '—'}</td>
-                        <td className="px-4 py-3 text-gray-600">{k.model || '—'}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-medium ${k.supportsImageGen ? 'text-green-500' : 'text-gray-400'}`}>{k.supportsImageGen ? '支持' : '不支持'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button onClick={() => openEditKey(k)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">编辑</button>
-                            <button onClick={() => handleDeleteKey(k.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">删除</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    {keys.length === 0 ? (
+                      <tr><td colSpan={5} className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击上方按钮添加</td></tr>
+                    ) : keys.map((k) => (
+                        <tr key={k.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-800">{k.name}</td>
+                          <td className="px-4 py-3 text-gray-600">{k.provider || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600">{k.model || '—'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-medium ${k.supportsImageGen ? 'text-green-500' : 'text-gray-400'}`}>{k.supportsImageGen ? '支持' : '不支持'}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button onClick={() => openEditKey(k)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">编辑</button>
+                              <button onClick={() => handleDeleteKey(k.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">删除</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              </div>
             </div>
-          </div>
 
-          {/* ── Tab: LLM Settings ── */}
-          <div className={tab === 'llm' ? 'max-w-lg' : 'hidden'}>
-            <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+          </div>
+          )}
+
+          {adminTab === 'tts' && (
+          <div className="space-y-5">
+            <p className="text-xs text-gray-400">在此选择朗读时使用的语音，选择会立即生效。语音列表由浏览器提供。</p>
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
-                <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  <option value="">-- 选择 API Key --</option>
-                  {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
-                </select>
-                <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">中文语音</label>
+                {zhVoices.length === 0 ? (
+                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">未检测到中文语音</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <select value={selectedZhVoice}
+                      onChange={(e) => { setSelectedZhVoice(e.target.value); localStorage.setItem('wstory_zh_voice', e.target.value); setDirty(true) }}
+                      className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                      <option value="">-- 使用默认 --</option>
+                      {zhVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                    </select>
+                    <button type="button" onClick={() => {
+                      speechSynthesis.cancel()
+                      const voice = selectedZhVoice ? allVoices.find((v) => v.name === selectedZhVoice) ?? null : allVoices.find((v) => v.lang.startsWith('zh')) ?? null
+                      setTimeout(() => {
+                        const utt = new SpeechSynthesisUtterance('测试语音效果')
+                        utt.voice = voice; utt.rate = 0.9
+                        speechSynthesis.speak(utt)
+                      }, 100)
+                    }} className="flex-shrink-0 border border-purple-200 text-purple-600 hover:bg-purple-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap">
+                      ▶ 测试语音
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
-                <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  <option value="">-- 选择 API Key --</option>
-                  {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
-                </select>
-                <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">英文语音</label>
+                {enVoices.length === 0 ? (
+                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">未检测到英文语音</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <select value={selectedEnVoice}
+                      onChange={(e) => { setSelectedEnVoice(e.target.value); localStorage.setItem('wstory_en_voice', e.target.value); setDirty(true) }}
+                      className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                      <option value="">-- 使用默认 --</option>
+                      {enVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                    </select>
+                    <button type="button" onClick={() => {
+                      speechSynthesis.cancel()
+                      const voice = selectedEnVoice ? allVoices.find((v) => v.name === selectedEnVoice) ?? null : allVoices.find((v) => v.lang.startsWith('en')) ?? null
+                      setTimeout(() => {
+                        const utt = new SpeechSynthesisUtterance('Testing voice output')
+                        utt.voice = voice; utt.rate = 0.9
+                        speechSynthesis.speak(utt)
+                      }, 100)
+                    }} className="flex-shrink-0 border border-blue-200 text-blue-600 hover:bg-blue-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap">
+                      ▶ 测试语音
+                    </button>
+                  </div>
+                )}
               </div>
-              <button onClick={handleSaveLlm} disabled={llmSaving}
-                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                {llmSaving ? '保存中...' : '保存配置'}
-              </button>
             </div>
           </div>
+          )}
+
+
 
         </div>{/* end scroll area */}
 

@@ -5,6 +5,13 @@ import { fillTemplate } from '@/lib/templateUtils'
 import { DEFAULT_STORY_TEMPLATE, DEFAULT_BEDTIME_STORY_TEMPLATE } from '@/lib/defaultPrompts'
 import type { TroubleInput, Story } from '@/types'
 
+// LLM always returns flat title string — use this raw type for parsing
+interface StoryRaw { title: string; pages: { pageNumber: number; text: string }[] }
+
+function wrapStory(raw: StoryRaw): Story {
+  return { title: { text: raw.title }, pages: raw.pages }
+}
+
 const router = Router()
 
 router.post('/', async (req, res) => {
@@ -17,20 +24,20 @@ router.post('/', async (req, res) => {
       const themeHint = theme ? `故事主题偏好：${theme}。` : ''
       const descHint = description ? `额外要求：${description}` : ''
       const template = getPromptByType('bedtime-story') ?? { ...DEFAULT_BEDTIME_STORY_TEMPLATE, id: 'default' }
-      const story = await generateJSON<Story>(
+      const story = wrapStory(await generateJSON<StoryRaw>(
         template.systemPrompt,
         fillTemplate(template.userPromptTemplate, { ageGroup, theme: themeHint, description: descHint }),
-      )
+      ))
       return res.json(story)
     }
     if (!emotion || !scene) {
       return res.status(400).json({ error: '缺少必填字段: emotion, scene' })
     }
     const template = getPromptByType('story') ?? { ...DEFAULT_STORY_TEMPLATE, id: 'default' }
-    const story = await generateJSON<Story>(
+    const story = wrapStory(await generateJSON<StoryRaw>(
       template.systemPrompt,
       fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description }),
-    )
+    ))
     res.json(story)
   } catch (err) {
     console.error('[POST /api/story]', err)

@@ -10,19 +10,25 @@ const router = Router()
 router.post('/', async (req, res) => {
   try {
     const { story, ageGroup }: { story: Story; ageGroup: string } = req.body
-    if (!story?.title || !Array.isArray(story?.pages) || story.pages.length === 0) {
+    if (!story?.title?.text || !Array.isArray(story?.pages) || story.pages.length === 0) {
       return res.status(400).json({ error: '缺少故事内容' })
     }
     const template = getPromptByType('image') ?? { ...DEFAULT_IMAGE_TEMPLATE, id: 'default' }
+    // Sort input pages by pageNumber before processing
+    const sortedStoryPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
     const pages: PictureBookPage[] = await Promise.all(
-      story.pages.map(async (page) => {
+      sortedStoryPages.map(async (page) => {
+        // Use English text for image prompt when available (better English art direction)
+        const pageText = page.textEn ?? page.text
         const imagePrompt = await generateText(
           template.systemPrompt,
-          fillTemplate(template.userPromptTemplate, { title: story.title, pageText: page.text, ageGroup }),
+          fillTemplate(template.userPromptTemplate, { title: story.title.textEn ?? story.title.text, pageText, ageGroup }),
         )
-        return { pageNumber: page.pageNumber, text: page.text, imagePrompt: imagePrompt.trim() }
+        return { pageNumber: page.pageNumber, text: page.text, textEn: page.textEn, imagePrompt: imagePrompt.trim() }
       }),
     )
+    // Ensure output is sorted by pageNumber
+    pages.sort((a, b) => a.pageNumber - b.pageNumber)
     const pictureBook: PictureBook = { title: story.title, pages }
     res.json(pictureBook)
   } catch (err) {

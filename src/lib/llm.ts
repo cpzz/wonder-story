@@ -17,7 +17,7 @@ function createClientFromKey(apiKey: APIKey): OpenAI {
   return new OpenAI({
     apiKey: plainKey,
     baseURL: apiKey.baseURL || undefined,
-    timeout: 30000,
+    timeout: 120000,
     maxRetries: 2,
   })
 }
@@ -25,17 +25,54 @@ function createClientFromKey(apiKey: APIKey): OpenAI {
 function cleanJSON(content: string): string {
   // Strip markdown code fences
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fenced) return fenced[1].trim()
+  if (fenced) return repairJSON(fenced[1].trim())
   // Extract first {...} or [...] block
   const obj = content.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
-  if (obj) return obj[1].trim()
-  return content.trim()
+  if (obj) return repairJSON(obj[1].trim())
+  return repairJSON(content.trim())
+}
+
+// Fix common LLM JSON output issues: unescaped control characters inside string values
+function repairJSON(raw: string): string {
+  // Replace unescaped newlines/tabs/carriage-returns inside JSON string values
+  // Walk char-by-char tracking whether we're inside a string
+  let result = ''
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (escaped) {
+      result += ch
+      escaped = false
+      continue
+    }
+    if (ch === '\\') {
+      escaped = true
+      result += ch
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      result += ch
+      continue
+    }
+    if (inString) {
+      if (ch === '\n')       { result += '\\n'; continue }
+      if (ch === '\r')       { result += '\\r'; continue }
+      if (ch === '\t')       { result += '\\t'; continue }
+      // Strip other control characters
+      if (ch.charCodeAt(0) < 0x20) continue
+    }
+    result += ch
+  }
+  return result
 }
 
 export async function generateJSON<T>(
   systemPrompt: string,
   userPrompt: string,
   llmType: 'story' | 'picture' = 'story',
+  maxTokens?: number,
 ): Promise<T> {
   const keyConfig = getActiveLLMKey(llmType)
   if (!keyConfig) {
@@ -57,8 +94,9 @@ export async function generateJSON<T>(
     ],
     ...(isDeepSeek(keyConfig) && {
       response_format: { type: 'json_object' },
-      max_tokens: 4096,
+      max_tokens: maxTokens ?? 4096,
     }),
+    ...(maxTokens && !isDeepSeek(keyConfig) && { max_tokens: maxTokens }),
   }
 
   const response = await client.chat.completions.create(requestParams)

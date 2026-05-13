@@ -10,6 +10,7 @@ data/.key
 
 # 用户生成内容
 usr/
+user/
 
 # 文档
 deepseek-api-usage.md

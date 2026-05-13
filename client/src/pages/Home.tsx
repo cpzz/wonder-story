@@ -83,6 +83,43 @@ function EditableSelect({
   )
 }
 
+// ── GuideModal ──
+
+function GuideModal({ book, lang, onClose }: { book: BookItem; lang: 'zh' | 'en'; onClose: () => void }) {
+  const isBedtime = book.mode === 'bedtime'
+  const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
+  const useEn = lang === 'en'
+  const message = useEn && book.guide.message.textEn ? book.guide.message.textEn : book.guide.message.text
+  const tipsArr = useEn && book.guide.tips.textEn?.length ? book.guide.tips.textEn : book.guide.tips.text
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[66vw] min-w-80 max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{cover.emoji}</span>
+            <div>
+              <h3 className="font-bold text-gray-800">{useEn ? 'A Note for Parents' : '给家长的话'}</h3>
+              <p className="text-xs text-gray-400">{useEn ? "Understanding your child's emotions" : '理解孩子的情绪'}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-gray-700 leading-relaxed text-sm bg-amber-50 rounded-xl p-4 border border-amber-100">{message}</p>
+          <ul className="space-y-2">
+            {tipsArr.map((tip, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                <span className="flex-shrink-0 w-5 h-5 bg-purple-100 text-purple-600 rounded-full text-xs flex items-center justify-center font-bold mt-0.5">{i + 1}</span>
+                {tip}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── BookReader ──
 
 type ReaderPage =
@@ -90,106 +127,98 @@ type ReaderPage =
   | { type: 'guide' }
   | { type: 'story'; pageNumber: number; text: string; textEn?: string; imagePrompt?: string }
 
-function BookReader({ book }: { book: BookItem }) {
+function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void }) {
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
 
   const pages: ReaderPage[] = [
     { type: 'cover' },
-    { type: 'guide' },
     ...(book.pictureBook
-      ? book.pictureBook.pages.map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn, imagePrompt: p.imagePrompt }))
-      : book.story.pages.map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn }))),
+      ? [...book.pictureBook.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn, imagePrompt: p.imagePrompt }))
+      : [...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn }))),
   ]
   const total = pages.length
 
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [voiceIdx, setVoiceIdx] = useState(0)
+  const defaultVoiceLang = (tl?: string): 'zh' | 'en' | 'off' => tl === 'en' ? 'en' : 'zh'
+  const [voiceLang, setVoiceLang] = useState<'zh' | 'en' | 'off'>(() => defaultVoiceLang(book.textLang))
   const [voiceEnabled, setVoiceEnabled] = useState(true)
-  const [voiceOpen, setVoiceOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
+
+  // Notify parent of active display language
+  useEffect(() => {
+    if (voiceLang === 'zh' || voiceLang === 'en') onDisplayLangChange?.(voiceLang)
+  }, [voiceLang])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Reset when book changes
-  useEffect(() => { setIdx(0); setPlaying(false); speechSynthesis.cancel() }, [book.id])
-
-  // Load TTS voices filtered by book language
   useEffect(() => {
-    const load = () => {
-      const all = speechSynthesis.getVoices()
-      const textLang = book.textLang ?? 'zh'
-      if (textLang === 'en') {
-        const en = all.filter((v) => v.lang.startsWith('en'))
-        setVoices(en.length ? en : all)
-      } else if (textLang === 'bilingual') {
-        const zhEn = all.filter((v) => v.lang.startsWith('zh') || v.lang.startsWith('en'))
-        setVoices(zhEn.length ? zhEn : all)
-      } else {
-        const zh = all.filter((v) => v.lang.startsWith('zh'))
-        setVoices(zh.length ? zh : all)
-      }
-    }
-    load()
-    speechSynthesis.addEventListener('voiceschanged', load)
-    return () => speechSynthesis.removeEventListener('voiceschanged', load)
-  }, [book.id, book.textLang])
+    setIdx(0); setPlaying(false); speechSynthesis.cancel()
+    setVoiceLang(defaultVoiceLang(book.textLang))
+    setVoiceEnabled(true)
+  }, [book.id])
 
-  const pageText = useCallback((p: ReaderPage): string => {
-    if (p.type === 'cover') return book.title
-    if (p.type === 'guide') return book.guide.message + ' ' + book.guide.tips.join('。')
-    // For bilingual books, pick language matching the selected voice
-    if (book.textLang === 'bilingual' && p.type === 'story' && p.textEn) {
-      const voiceLang = voices[voiceIdx]?.lang ?? ''
-      return voiceLang.startsWith('en') ? p.textEn : p.text
+  const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {
+    if (!voiceEnabled || voiceLang === 'off') return null
+    const getStoredVoice = (lang: 'zh' | 'en') => {
+      const all = speechSynthesis.getVoices()
+      const name = localStorage.getItem(lang === 'zh' ? 'wstory_zh_voice' : 'wstory_en_voice')
+      if (name) return all.find((v) => v.name === name) ?? all.find((v) => v.lang.startsWith(lang)) ?? null
+      return all.find((v) => v.lang.startsWith(lang)) ?? null
     }
-    return p.text
-  }, [book, voices, voiceIdx])
+    const baseText = p.type === 'cover'
+      ? (voiceLang === 'en' ? (book.title.textEn ?? book.title.text) : book.title.text)
+      : p.text
+    if (voiceLang === 'en') {
+      return { text: p.type === 'cover' ? (book.title.textEn ?? book.title.text) : (p.textEn ?? p.text ?? ''), voice: getStoredVoice('en') }
+    }
+    // voiceLang === 'zh'
+    return { text: baseText, voice: getStoredVoice('zh') }
+  }, [book, voiceLang, voiceEnabled])
 
   const speak = useCallback((p: ReaderPage) => {
     speechSynthesis.cancel()
-    if (!voices.length) return
-    const utt = new SpeechSynthesisUtterance(pageText(p))
-    utt.voice = voices[voiceIdx] ?? null
+    const s = getSpeakable(p)
+    if (!s) return
+    const utt = new SpeechSynthesisUtterance(s.text)
+    utt.voice = s.voice
     utt.rate = 0.9
     speechSynthesis.speak(utt)
-  }, [voices, voiceIdx, pageText])
+  }, [getSpeakable])
 
-  // Auto-play: speak current page, wait for it to finish, then wait 1s and advance
+  // Speak current page and (if playing) auto-advance.
+  // Re-runs on page change, play/pause toggle, or any voice setting change.
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     speechSynthesis.cancel()
-    if (!playing) return
-
-    if (voices.length && voiceEnabled) {
-      const utt = new SpeechSynthesisUtterance(pageText(pages[idx]))
-      utt.voice = voices[voiceIdx] ?? null
-      utt.rate = 0.9
-      utt.onend = () => {
+    const s = getSpeakable(pages[idx])
+    if (playing) {
+      if (s) {
+        const utt = new SpeechSynthesisUtterance(s.text)
+        utt.voice = s.voice
+        utt.rate = 0.9
+        utt.onend = () => {
+          timerRef.current = setTimeout(() => {
+            setIdx((i) => { if (i < total - 1) return i + 1; setPlaying(false); return i })
+          }, 1000)
+        }
+        speechSynthesis.speak(utt)
+      } else {
         timerRef.current = setTimeout(() => {
-          setIdx((i) => {
-            if (i < total - 1) return i + 1
-            setPlaying(false)
-            return i
-          })
-        }, 1000)
+          setIdx((i) => { if (i < total - 1) return i + 1; setPlaying(false); return i })
+        }, 6000)
       }
-      speechSynthesis.speak(utt)
     } else {
-      // No voices: fall back to fixed 4s delay
-      timerRef.current = setTimeout(() => {
-        setIdx((i) => {
-          if (i < total - 1) return i + 1
-          setPlaying(false)
-          return i
-        })
-      }, 4000)
+      if (s) {
+        const utt = new SpeechSynthesisUtterance(s.text)
+        utt.voice = s.voice
+        utt.rate = 0.9
+        speechSynthesis.speak(utt)
+      }
     }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      speechSynthesis.cancel()
-    }
-  }, [playing, idx])
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); speechSynthesis.cancel() }
+  }, [playing, idx, getSpeakable])
 
   const goTo = (i: number) => { speechSynthesis.cancel(); setPlaying(false); setIdx(i) }
   const prev = () => goTo(Math.max(0, idx - 1))
@@ -212,7 +241,9 @@ function BookReader({ book }: { book: BookItem }) {
                 <div className="absolute -bottom-12 -left-8 w-52 h-52 rounded-full bg-white/10" />
                 <div className="relative">
                   <div className="text-7xl mb-6 drop-shadow-lg">{cover.emoji}</div>
-                  <h2 className="text-white font-bold text-2xl leading-snug drop-shadow">{book.title}</h2>
+                  <h2 className="text-white font-bold text-2xl leading-snug drop-shadow">
+                    {voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text}
+                  </h2>
                 </div>
                 <div className="relative">
                   <div className="flex flex-wrap gap-1.5 mb-2">
@@ -230,26 +261,7 @@ function BookReader({ book }: { book: BookItem }) {
           </div>
         )}
 
-        {cur.type === 'guide' && (
-          <div className="w-full max-w-lg space-y-4">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-3xl">{cover.emoji}</span>
-              <div>
-                <h3 className="font-bold text-gray-800">给家长的话</h3>
-                <p className="text-xs text-gray-400">理解孩子的情绪</p>
-              </div>
-            </div>
-            <p className="text-gray-700 leading-relaxed text-sm bg-amber-50 rounded-xl p-4 border border-amber-100">{book.guide.message}</p>
-            <ul className="space-y-2">
-              {book.guide.tips.map((tip, i) => (
-                <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
-                  <span className="flex-shrink-0 w-5 h-5 bg-purple-100 text-purple-600 rounded-full text-xs flex items-center justify-center font-bold mt-0.5">{i + 1}</span>
-                  {tip}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {cur.type === 'guide' && null}
 
         {cur.type === 'story' && (
           <div className="w-full max-w-lg space-y-5">
@@ -257,15 +269,10 @@ function BookReader({ book }: { book: BookItem }) {
               style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)` }}>
               <span className="text-8xl">{cover.emoji}</span>
             </div>
-            {book.textLang === 'bilingual' && cur.textEn ? (
-              <div className="space-y-3 px-2 text-center">
-                <p className="text-gray-800 text-xl leading-relaxed font-medium">{cur.text}</p>
-                <div className="border-t border-gray-100" />
-                <p className="text-gray-500 text-base leading-relaxed italic">{cur.textEn}</p>
-              </div>
-            ) : (
-              <p className="text-gray-800 text-xl leading-relaxed font-medium text-center px-2">{cur.text}</p>
-            )}
+            {(() => {
+              const displayText = voiceLang === 'en' && cur.textEn ? cur.textEn : cur.text
+              return <p className="text-gray-800 text-xl leading-relaxed font-medium text-center px-2">{displayText}</p>
+            })()}
             {cur.imagePrompt && (
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                 <p className="text-xs text-gray-400 font-medium mb-1">🎨 插画提示词</p>
@@ -280,111 +287,78 @@ function BookReader({ book }: { book: BookItem }) {
       {/* ── Navigation bar ── */}
       <div className="flex-shrink-0 border-t border-gray-100 bg-white py-3">
         <div className="w-full flex items-center gap-3 px-6">
-        {/* Prev */}
-        {/* Page dots */}
-        <div className="flex-1 flex items-center justify-center gap-1 overflow-hidden">
-          {pages.map((_, i) => (
-            <button key={i} onClick={() => goTo(i)}
-              className={`rounded-full transition-all ${i === idx ? 'w-4 h-2 bg-purple-600' : 'w-2 h-2 bg-gray-200 hover:bg-gray-300'}`} />
-          ))}
-        </div>
+          {/* Guide button - leftmost */}
+          <button onClick={() => setGuideOpen(true)}
+            className="flex-shrink-0 px-2.5 h-9 flex items-center justify-center rounded-xl border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all text-xs font-medium whitespace-nowrap">
+            💛 给家长的话
+          </button>
 
-        {/* Prev */}
-        <button onClick={prev} disabled={idx === 0}
-          className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+          {/* Page dots */}
+          <div className="flex-1 flex items-center justify-center gap-1 overflow-hidden">
+            {pages.map((_, i) => (
+              <button key={i} onClick={() => goTo(i)}
+                className={`rounded-full transition-all ${i === idx ? 'w-4 h-2 bg-purple-600' : 'w-2 h-2 bg-gray-200 hover:bg-gray-300'}`} />
+            ))}
+          </div>
 
-        {/* Auto-play toggle */}
-        <button onClick={() => setPlaying((p) => !p)}
-          className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all ${playing ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 text-gray-500 hover:text-purple-600 hover:border-purple-300'}`}
-          title={playing ? '暂停' : '自动播放'}>
-          {playing ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" />
+          {/* Prev */}
+          <button onClick={prev} disabled={idx === 0}
+            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
+          </button>
 
-        {/* Next */}
-        <button onClick={next} disabled={idx === total - 1}
-          className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        {/* Voice toggle + selector */}
-        <div className="relative flex items-center">
-          <button
-            onClick={() => { setVoiceEnabled((e) => !e); setVoiceOpen(false) }}
-            className={`w-9 h-9 flex items-center justify-center rounded-l-xl border transition-all ${
-              voiceEnabled
-                ? 'bg-purple-50 border-purple-300 text-purple-600'
-                : 'border-gray-200 text-gray-300 hover:text-gray-400'
-            }`}
-            title={voiceEnabled ? '关闭语音' : '开启语音'}>
-            {voiceEnabled ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M19.07 4.929a9 9 0 010 14.142" />
+          {/* Auto-play toggle */}
+          <button onClick={() => setPlaying((p) => !p)}
+            className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border transition-all ${playing ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 text-gray-500 hover:text-purple-600 hover:border-purple-300'}`}
+            title={playing ? '暂停' : '自动播放'}>
+            {playing ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" />
               </svg>
             ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
               </svg>
             )}
           </button>
-          <button
-            onClick={() => voiceEnabled && setVoiceOpen((o) => !o)}
-            disabled={!voiceEnabled}
-            className={`w-5 h-9 flex items-center justify-center rounded-r-xl border-t border-r border-b transition-all ${
-              voiceEnabled
-                ? 'border-purple-300 text-purple-400 hover:bg-purple-50'
-                : 'border-gray-200 text-gray-200 cursor-not-allowed'
-            }`}
-            title="选择语音">
-            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M7 10l5 5 5-5z" />
+
+          {/* Next */}
+          <button onClick={next} disabled={idx === total - 1}
+            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
-          {voiceOpen && voiceEnabled && voices.length > 0 && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setVoiceOpen(false)} />
-              <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-xl z-20 min-w-48 max-h-56 overflow-y-auto">
-                <p className="text-xs text-gray-400 font-medium px-3 pt-2 pb-1">选择语音</p>
-                {voices.map((v, i) => (
-                  <button key={v.name} onClick={() => { setVoiceIdx(i); setVoiceOpen(false) }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors ${i === voiceIdx ? 'text-purple-600 font-medium bg-purple-50' : 'text-gray-700'}`}>
-                    {v.name}
-                    <span className="ml-1 text-gray-400">{v.lang}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          {voiceOpen && voiceEnabled && voices.length === 0 && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setVoiceOpen(false)} />
-              <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-xl z-20 px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                浏览器暂无可用语音
-              </div>
-            </>
-          )}
-        </div>
 
-        {/* Page label */}
-        <span className="text-xs text-gray-400 text-right" style={{ width: '48px', flexShrink: 0 }}>
-          {idx === 0 ? '封面' : idx === 1 ? '引导' : `${idx - 1}/${total - 2}`}
-        </span>
+          {/* Voice enable/disable (master mute) */}
+          <button onClick={() => setVoiceEnabled((e) => !e)}
+            className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border transition-all ${voiceEnabled ? 'bg-green-50 border-green-300 text-green-600' : 'border-gray-200 text-gray-300 hover:text-gray-400'}`}
+            title={voiceEnabled ? '关闭朗读' : '开启朗读'}>
+            {voiceEnabled ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+            ) : (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06A8.99 8.99 0 0 0 17.73 18l1.99 2L21 18.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+            )}
+          </button>
+
+          {/* 中|英 segmented language selector */}
+          <div className={`flex-shrink-0 flex border border-gray-200 rounded-xl overflow-hidden transition-opacity ${!voiceEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <button onClick={() => setVoiceLang('zh')}
+              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'zh' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>中</button>
+            <div className="w-px bg-gray-200" />
+            <button onClick={() => setVoiceLang('en')}
+              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'en' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>英</button>
+          </div>
+
+          {/* Page label */}
+          <span className="text-xs text-gray-400 text-right flex-shrink-0" style={{ width: '48px' }}>
+            {idx === 0 ? '封面' : `${idx}/${total - 1}`}
+          </span>
         </div>
       </div>
+      {guideOpen && <GuideModal book={book} lang={voiceLang === 'en' ? 'en' : 'zh'} onClose={() => setGuideOpen(false)} />}
     </div>
   )
 }
@@ -408,7 +382,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
-  const [textLang, setTextLang] = useState<'zh' | 'en' | 'bilingual'>('zh')
+  const textLang: 'zh' | 'en' | 'bilingual' = 'bilingual'
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -458,12 +432,21 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       setGenStep(mode === 'bedtime' ? '准备睡前小贴士...' : '正在分析情绪...')
       const guideRes = await fetch('/api/trouble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
       if (!guideRes.ok) throw new Error((await guideRes.json()).error)
-      const guide: Guide = await guideRes.json()
+      let guide: Guide = await guideRes.json()
 
       setGenStep(mode === 'bedtime' ? '正在创作睡前故事...' : '正在创作专属故事...')
       const storyRes = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
       if (!storyRes.ok) throw new Error((await storyRes.json()).error)
-      const story: Story = await storyRes.json()
+      let story: Story = await storyRes.json()
+
+      if (textLang === 'bilingual' || textLang === 'en') {
+        setGenStep('正在生成故事内容...')
+        const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, textLang }) })
+        if (!transRes.ok) throw new Error((await transRes.json()).error)
+        const translated = await transRes.json()
+        story = translated.story
+        guide = translated.guide
+      }
 
       let pictureBook: PictureBook | undefined
       if (!storyOnly) {
@@ -480,7 +463,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       const book: BookItem = await saveRes.json()
 
       onCreated(book); onClose()
-      setEmotion(''); setScene(''); setAgeGroup(''); setDescription(''); setTheme(''); setTextLang('zh')
+      setEmotion(''); setScene(''); setAgeGroup(''); setDescription(''); setTheme('')
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试')
     } finally { setGenerating(false); setGenStep('') }
@@ -489,8 +472,8 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   if (!open) return null
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="relative bg-white rounded-2xl shadow-2xl flex flex-col" style={{ width: '520px' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <h3 className="font-bold text-gray-800 text-lg">创作新绘本</h3>
           {!generating && (
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
@@ -498,7 +481,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
         </div>
         {/* Mode tabs */}
         {!generating && (
-          <div className="flex border-b border-gray-100">
+          <div className="flex border-b border-gray-100 flex-shrink-0">
             <button onClick={() => { setMode('emotion'); setError(null) }}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mode === 'emotion' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-400 hover:text-gray-600'}`}>
               😢 情绪故事
@@ -510,7 +493,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
           </div>
         )}
         {generating ? (
-          <div className="px-6 py-16 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
             <div className="inline-block w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4" />
             <p className="text-gray-600 text-sm">{genStep}</p>
           </div>
@@ -518,17 +501,15 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
           <div className="px-6 py-5 space-y-5">
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
-            {/* Age — always first */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
-              <input type="number" min={2} max={14} value={ageGroup}
-                onChange={(e) => setAgeGroup(e.target.value)} placeholder="请输入年龄（2-14）"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
-            </div>
-
+            {/* Emotion mode */}
             {mode === 'emotion' && (<>
-              {/* Emotion + Scene side by side */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
+                  <input type="number" min={2} max={14} value={ageGroup}
+                    onChange={(e) => setAgeGroup(e.target.value)} placeholder="2-14"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
+                </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">孩子的情绪 <span className="text-red-400">*</span></label>
                   <EditableSelect value={emotion} options={options.emotions} placeholder="选择情绪..." onChange={setEmotion}
@@ -540,42 +521,37 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                     onAdd={(v) => handleAdd('scenes', v)} onDelete={(v) => handleDelete('scenes', v)} />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">具体描述<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                  placeholder="描述孩子的具体情况，帮助生成更贴心的故事..."
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
+              </div>
             </>)}
 
-            {mode === 'bedtime' && (
+            {/* Bedtime mode */}
+            {mode === 'bedtime' && (<>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
+                  <input type="number" min={2} max={14} value={ageGroup}
+                    onChange={(e) => setAgeGroup(e.target.value)} placeholder="2-14"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">故事主题<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                  <EditableSelect value={theme} options={options.themes} placeholder="选择或输入主题..." onChange={setTheme}
+                    onAdd={(v) => handleAdd('themes', v)} onDelete={(v) => handleDelete('themes', v)} />
+                </div>
+              </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">故事主题<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
-                <EditableSelect value={theme} options={options.themes} placeholder="选择或输入主题..." onChange={setTheme}
-                  onAdd={(v) => handleAdd('themes', v)} onDelete={(v) => handleDelete('themes', v)} />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">额外想法<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                  placeholder="孩子喜欢的角色、特别的元素…"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
               </div>
-            )}
+            </>)}
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {mode === 'bedtime' ? '额外想法' : '具体描述'}
-                <span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span>
-              </label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                placeholder={mode === 'bedtime' ? '孩子喜欢的角色、特别的元素…' : '描述孩子的具体情况，帮助生成更贴心的故事...'}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
-            </div>
-
-            {/* Language selector */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">故事语言</label>
-              <div className="flex gap-2">
-                {([['zh', '中文'], ['en', 'English'], ['bilingual', '双语']] as const).map(([val, label]) => (
-                  <button key={val} type="button" onClick={() => setTextLang(val)}
-                    className={`flex-1 py-2 rounded-xl border text-sm font-medium transition-colors ${
-                      textLang === val
-                        ? 'bg-purple-600 border-purple-600 text-white'
-                        : 'border-gray-200 text-gray-600 hover:border-purple-300 hover:text-purple-600'
-                    }`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             <div className="flex gap-3 pt-1">
               <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-medium py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm">取消</button>
@@ -618,6 +594,7 @@ export default function HomePage() {
   const [selectedBook, setSelectedBook] = useState<BookItem | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
+  const [displayLang, setDisplayLang] = useState<'zh' | 'en'>('zh')
   const [options, setOptions] = useState<DropdownOptions>(DEFAULT_OPTIONS)
   const [loading, setLoading] = useState(true)
 
@@ -688,8 +665,17 @@ export default function HomePage() {
                   {c.emoji}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-purple-700' : 'text-gray-800'}`}>{book.title}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{book.mode === 'bedtime' ? `🌙 ${book.theme || '睡前故事'}` : `💛 ${book.emotion}`} · {book.ageGroup}岁 · {book.story.pages.length}页 · {new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
+                  {(() => {
+                    const displayTitle = displayLang === 'en' && book.title.textEn
+                      ? book.title.textEn
+                      : book.title.text
+                    return (<>
+                      <div className="flex items-center gap-1.5">
+                        <p className={`text-sm font-medium truncate ${isSelected ? 'text-purple-700' : 'text-gray-800'}`}>{displayTitle}</p>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{book.mode === 'bedtime' ? `🌙 ${book.theme || '睡前故事'}` : `💛 ${book.emotion}`} · {book.ageGroup}岁 · {book.story.pages.length}页 · {new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
+                    </>)
+                  })()}
                 </div>
                 <button onClick={(e) => handleDelete(book.id, e)}
                   className="opacity-0 group-hover:opacity-100 flex-shrink-0 w-6 h-6 text-gray-300 hover:text-red-500 flex items-center justify-center rounded transition-all text-lg leading-none" title="删除">
@@ -713,7 +699,7 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <BookReader book={selectedBook} />
+          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} />
         )}
       </main>
       <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} options={options} onOptionsChange={setOptions} onCreated={handleCreated} />

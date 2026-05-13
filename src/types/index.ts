@@ -84,7 +84,7 @@ export interface StoryPage {
 }
 
 export interface Story {
-  title: string
+  title: { text: string; textEn?: string }
   pages: StoryPage[]
 }
 
@@ -96,21 +96,21 @@ export interface PictureBookPage {
 }
 
 export interface PictureBook {
-  title: string
+  title: { text: string; textEn?: string }
   pages: PictureBookPage[]
 }
 
 export interface Guide {
-  emotion: string
-  message: string
-  tips: string[]
+  emotion: { text: string; textEn?: string }
+  message: { text: string; textEn?: string }
+  tips: { text: string[]; textEn?: string[] }
 }
 
 // ── Books ──
 
 export interface BookItem {
   id: string
-  title: string
+  title: { text: string; textEn?: string }
   emotion: string
   scene: string
   ageGroup: string

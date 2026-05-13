@@ -58,12 +58,8 @@ export const DEFAULT_GUIDE_TEMPLATE: TemplateBase = {
 场景：{scene}
 具体情况：{description}
 
-请以JSON格式返回（只返回JSON）：
-{
-  "emotion": "{emotion}",
-  "message": "对孩子这种情绪的简短理解和正常化说明（1-2句话）",
-  "tips": ["具体引导建议1", "具体引导建议2", "具体引导建议3", "具体引导建议4"]
-}`,
+请只返回JSON对象（不要其他任何文字），所有字符串中的引号必须转义：
+{"emotion":"{emotion}","message":"对孩子这种情绪的简短理解（1-2句）","tips":["建议1","建议2","建议3","建议4"]}`,
 }
 
 export const DEFAULT_BEDTIME_STORY_TEMPLATE: TemplateBase = {
@@ -100,12 +96,8 @@ export const DEFAULT_BEDTIME_GUIDE_TEMPLATE: TemplateBase = {
   userPromptTemplate: `请为家长提供陪伴{ageGroup}岁孩子睡前故事的建议。
 {description}
 
-请以JSON格式返回（只返回JSON）：
-{
-  "emotion": "睡前时光",
-  "message": "关于睡前故事对孩子的积极意义（1-2句话）",
-  "tips": ["睡前仪式建议1", "睡前仪式建议2", "朗读技巧建议", "互动建议"]
-}`,
+请只返回JSON对象（不要其他任何文字）：
+{"emotion":"睡前时光","message":"睡前故事的积极意义（1-2句）","tips":["睡前仪式建议1","睡前仪式建议2","朗读技巧","互动建议"]}`,
 }
 
 export function getDefaultPrompts(): PromptTemplate[] {

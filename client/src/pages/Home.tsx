@@ -38,8 +38,22 @@ function EditableSelect({
 }) {
   const [open, setOpen] = useState(false)
   const [newVal, setNewVal] = useState('')
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [open])
+
   return (
-    <div className="relative">
+    <div ref={wrapperRef} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3 bg-white hover:border-purple-300 transition-colors text-sm focus:outline-none focus:ring-2 focus:ring-purple-300">
         <span className={value ? 'text-gray-800' : 'text-gray-400'}>{value || placeholder}</span>
@@ -48,11 +62,11 @@ function EditableSelect({
         </svg>
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-20 max-h-56 flex flex-col">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-56 flex flex-col">
             <div className="overflow-y-auto">
-              {options.map((opt) => (
+              {(!options || options.length === 0) ? (
+                <p className="text-center text-gray-400 text-xs py-4">暂无选项</p>
+              ) : options.map((opt) => (
                 <div key={opt} className="flex items-center group hover:bg-gray-50">
                   <button type="button" onClick={() => { onChange(opt); setOpen(false) }}
                     className={`flex-1 text-left px-4 py-2.5 text-sm ${opt === value ? 'text-purple-600 font-medium bg-purple-50' : 'text-gray-700'}`}>
@@ -64,7 +78,6 @@ function EditableSelect({
                   </button>
                 </div>
               ))}
-              {options.length === 0 && <p className="text-center text-gray-400 text-xs py-4">暂无选项</p>}
             </div>
             <div className="border-t border-gray-100 p-2 flex gap-2">
               <input value={newVal} onChange={(e) => setNewVal(e.target.value)}
@@ -77,7 +90,6 @@ function EditableSelect({
               </button>
             </div>
           </div>
-        </>
       )}
     </div>
   )
@@ -604,7 +616,14 @@ export default function HomePage() {
       if (data.length > 0) setSelectedBook(data[0])
       setLoading(false)
     })
-    fetch('/api/options').then((r) => (r.ok ? r.json() : DEFAULT_OPTIONS)).then(setOptions)
+    fetch('/api/options').then((r) => (r.ok ? r.json() : {})).then((data) => {
+      setOptions({
+        emotions: data.emotions ?? DEFAULT_OPTIONS.emotions,
+        scenes: data.scenes ?? DEFAULT_OPTIONS.scenes,
+        ageGroups: data.ageGroups ?? DEFAULT_OPTIONS.ageGroups,
+        themes: data.themes ?? DEFAULT_OPTIONS.themes,
+      })
+    })
   }, [])
 
   const handleCreated = (book: BookItem) => { setBooks((prev) => [book, ...prev]); setSelectedBook(book) }

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getBooks, getBookById, saveBook, deleteBook } from '@/lib/booksStore'
+import { getBooks, getBookById, saveBook, deleteBook, getImagePath } from '@/lib/booksStore'
 import type { BookItem } from '@/types'
 
 const router = Router()
@@ -35,6 +35,13 @@ router.delete('/:id', (req, res) => {
   const deleted = deleteBook(req.params.id)
   if (!deleted) return res.status(404).json({ error: '绘本不存在' })
   res.json({ success: true })
+})
+
+router.get('/:id/images/:pageNumber', (req, res) => {
+  const { id, pageNumber } = req.params
+  const imagePath = getImagePath(id, parseInt(pageNumber))
+  if (!imagePath) return res.status(404).json({ error: '图片不存在' })
+  res.sendFile(imagePath)
 })
 
 export default router

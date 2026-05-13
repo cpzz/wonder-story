@@ -216,16 +216,16 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                   <option value="">-- 选择 API Key --</option>
                   {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
                 </select>
-                <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
+                <p className="text-xs text-gray-400 mt-1.5">用于生成故事文字 + 图片描述</p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">绘本图片模型</label>
                 <select value={llm.pictureLLMId} onChange={(e) => { setLlm({ ...llm, pictureLLMId: e.target.value }); setDirty(true) }}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                   <option value="">-- 选择 API Key --</option>
-                  {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                  {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
                 </select>
-                <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
+                <p className="text-xs text-gray-400 mt-1.5">用于生成绘本插画（如 qwen-image-edit-plus）</p>
               </div>
             </div>
 

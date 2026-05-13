@@ -6,6 +6,7 @@ import storyRouter from './routes/story'
 import troubleRouter from './routes/trouble'
 import translateRouter from './routes/translate'
 import pictureBookRouter from './routes/pictureBook'
+import qwenImageRouter from './routes/qwenImage'
 import adminApiKeysRouter from './routes/admin/apiKeys'
 import adminLlmSettingsRouter from './routes/admin/llmSettings'
 import adminPromptsRouter from './routes/admin/prompts'
@@ -21,6 +22,7 @@ app.use('/api/story', storyRouter)
 app.use('/api/trouble', troubleRouter)
 app.use('/api/translate', translateRouter)
 app.use('/api/picture-book', pictureBookRouter)
+app.use('/api/qwen-image', qwenImageRouter)
 app.use('/api/llm-status', llmStatusRouter)
 app.use('/api/admin/api-keys', adminApiKeysRouter)
 app.use('/api/admin/llm-settings', adminLlmSettingsRouter)

@@ -139,9 +139,29 @@ type ReaderPage =
   | { type: 'guide' }
   | { type: 'story'; pageNumber: number; text: string; textEn?: string; imagePrompt?: string }
 
-function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void }) {
+function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void; hasPictureLLM?: boolean }) {
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
+  const [generatingImages, setGeneratingImages] = useState(false)
+
+  const handleGenerateImages = async (pageNumber?: number) => {
+    if (!book.id) return
+    setGeneratingImages(true)
+    try {
+      const res = await fetch('/api/qwen-image/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: book.id, ...(pageNumber && { pageNumbers: [pageNumber] }) }),
+      })
+      const data = await res.json()
+      if (!data.success) console.error('[generate images] failed:', data)
+      window.location.reload()
+    } catch (err) {
+      console.error('[generate images] error:', err)
+    } finally {
+      setGeneratingImages(false)
+    }
+  }
 
   const pages: ReaderPage[] = [
     { type: 'cover' },
@@ -157,6 +177,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
   const [voiceLang, setVoiceLang] = useState<'zh' | 'en' | 'off'>(() => defaultVoiceLang(book.textLang))
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [guideOpen, setGuideOpen] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({})
 
   // Notify parent of active display language
   useEffect(() => {
@@ -212,13 +233,13 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
         utt.rate = 0.9
         utt.onend = () => {
           timerRef.current = setTimeout(() => {
-            setIdx((i) => { if (i < total - 1) return i + 1; setPlaying(false); return i })
+            setIdx((i) => { if (i < total - 1) return i + 1; return i })
           }, 1000)
         }
         speechSynthesis.speak(utt)
       } else {
         timerRef.current = setTimeout(() => {
-          setIdx((i) => { if (i < total - 1) return i + 1; setPlaying(false); return i })
+          setIdx((i) => { if (i < total - 1) return i + 1; return i })
         }, 6000)
       }
     } else {
@@ -277,20 +298,35 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
 
         {cur.type === 'story' && (
           <div className="w-full max-w-lg space-y-5">
-            <div className="w-full rounded-2xl flex items-center justify-center py-14"
-              style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)` }}>
+            {/* Image display */}
+            <img
+              src={`/api/books/${book.id}/images/${cur.pageNumber}`}
+              alt={`第${cur.pageNumber}页插画`}
+              className="w-full rounded-2xl shadow-lg object-cover"
+              style={{ aspectRatio: '1/1' }}
+              onLoad={() => setImageLoaded((prev) => ({ ...prev, [cur.pageNumber]: true }))}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+                const placeholder = e.currentTarget.nextElementSibling as HTMLElement
+                if (placeholder) placeholder.style.display = 'flex'
+              }}
+            />
+            <div className="w-full rounded-2xl flex flex-col items-center justify-center py-14"
+              style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)`, display: 'none' }}>
               <span className="text-8xl">{cover.emoji}</span>
+              {hasPictureLLM && (
+                <button
+                  onClick={() => handleGenerateImages(cur.pageNumber)}
+                  disabled={generatingImages}
+                  className="mt-4 bg-purple-600 hover:bg-purple-700 text-white text-sm px-5 py-2 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {generatingImages ? '生成中...' : '生成插画'}
+                </button>
+              )}
             </div>
             {(() => {
               const displayText = voiceLang === 'en' && cur.textEn ? cur.textEn : cur.text
               return <p className="text-gray-800 text-xl leading-relaxed font-medium text-center px-2">{displayText}</p>
             })()}
-            {cur.imagePrompt && (
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-xs text-gray-400 font-medium mb-1">🎨 插画提示词</p>
-                <p className="text-xs text-gray-500 italic leading-relaxed">{cur.imagePrompt}</p>
-              </div>
-            )}
           </div>
         )}
         </div>
@@ -474,6 +510,18 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       if (!saveRes.ok) throw new Error((await saveRes.json()).error)
       const book: BookItem = await saveRes.json()
 
+      if (book.id && pictureBook) {
+        setGenStep('正在生成插画...')
+        const imgRes = await fetch('/api/qwen-image/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookId: book.id }),
+        })
+        if (!imgRes.ok) throw new Error('生成插画失败')
+        const imgData = await imgRes.json()
+        if (!imgData.success) throw new Error('部分插画生成失败')
+      }
+
       onCreated(book); onClose()
       setEmotion(''); setScene(''); setAgeGroup(''); setDescription(''); setTheme('')
     } catch (err) {
@@ -609,6 +657,7 @@ export default function HomePage() {
   const [displayLang, setDisplayLang] = useState<'zh' | 'en'>('zh')
   const [options, setOptions] = useState<DropdownOptions>(DEFAULT_OPTIONS)
   const [loading, setLoading] = useState(true)
+  const [llmStatus, setLlmStatus] = useState<{ hasStoryLLM: boolean; hasPictureLLM: boolean }>({ hasStoryLLM: false, hasPictureLLM: false })
 
   useEffect(() => {
     fetch('/api/books').then((r) => (r.ok ? r.json() : [])).then((data: BookItem[]) => {
@@ -624,6 +673,7 @@ export default function HomePage() {
         themes: data.themes ?? DEFAULT_OPTIONS.themes,
       })
     })
+    fetch('/api/llm-status').then((r) => (r.ok ? r.json() : {})).then(setLlmStatus)
   }, [])
 
   const handleCreated = (book: BookItem) => { setBooks((prev) => [book, ...prev]); setSelectedBook(book) }
@@ -718,7 +768,7 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} />
+          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} hasPictureLLM={llmStatus.hasPictureLLM} />
         )}
       </main>
       <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} options={options} onOptionsChange={setOptions} onCreated={handleCreated} />

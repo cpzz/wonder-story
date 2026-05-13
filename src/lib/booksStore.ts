@@ -17,6 +17,29 @@ function bookFile(id: string): string {
   return path.join(bookDir(id), 'index.json')
 }
 
+export function imagesDir(id: string): string {
+  const dir = path.join(bookDir(id), 'images')
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+export function saveImage(id: string, pageNumber: number, imageBuffer: Buffer): string {
+  const dir = imagesDir(id)
+  const imagePath = path.join(dir, `${pageNumber}.png`)
+  fs.writeFileSync(imagePath, imageBuffer)
+  return imagePath
+}
+
+export function getImagePath(id: string, pageNumber: number): string | undefined {
+  const imagePath = path.join(imagesDir(id), `${pageNumber}.png`)
+  return fs.existsSync(imagePath) ? imagePath : undefined
+}
+
+export function hasImage(id: string, pageNumber: number): boolean {
+  const imagePath = path.join(imagesDir(id), `${pageNumber}.png`)
+  return fs.existsSync(imagePath)
+}
+
 export function getBooks(): BookItem[] {
   ensureUsrDir()
   const entries = fs.readdirSync(USR_DIR, { withFileTypes: true })

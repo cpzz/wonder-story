@@ -3,7 +3,7 @@ import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import type { BookItem } from '@/types'
 
-const USR_DIR = path.join(process.cwd(), 'usr')
+const USR_DIR = path.join(process.cwd(), 'user', 'books')
 
 function ensureUsrDir(): void {
   if (!fs.existsSync(USR_DIR)) fs.mkdirSync(USR_DIR, { recursive: true })

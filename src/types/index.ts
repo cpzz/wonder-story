@@ -64,6 +64,8 @@ export interface PromptTemplate {
   updatedAt: string
 }
 
+export type TextLang = 'zh' | 'en' | 'bilingual'
+
 export interface TroubleInput {
   emotion: string
   scene: string
@@ -72,11 +74,13 @@ export interface TroubleInput {
   pageCount?: number
   mode?: 'emotion' | 'bedtime'
   theme?: string
+  textLang?: TextLang
 }
 
 export interface StoryPage {
   pageNumber: number
   text: string
+  textEn?: string
 }
 
 export interface Story {
@@ -87,6 +91,7 @@ export interface Story {
 export interface PictureBookPage {
   pageNumber: number
   text: string
+  textEn?: string
   imagePrompt: string
 }
 
@@ -112,6 +117,7 @@ export interface BookItem {
   description?: string
   mode?: 'emotion' | 'bedtime'
   theme?: string
+  textLang?: TextLang
   guide: Guide
   story: Story
   pictureBook?: PictureBook

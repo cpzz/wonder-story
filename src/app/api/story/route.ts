@@ -5,10 +5,17 @@ import { fillTemplate } from '@/lib/templateUtils'
 import { DEFAULT_STORY_TEMPLATE } from '@/lib/defaultPrompts'
 import type { TroubleInput, Story } from '@/types'
 
+function langInstruction(textLang?: string): string {
+  if (textLang === 'en') return '\n\nIMPORTANT: Write all story text in English.'
+  if (textLang === 'bilingual')
+    return '\n\nIMPORTANT: For each page provide both Chinese and English text. Use this JSON shape for pages: {"pageNumber": 1, "text": "中文内容", "textEn": "English content"}. Also make the title bilingual: "中文标题 / English Title".'
+  return ''
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body: TroubleInput = await req.json()
-    const { emotion, scene, ageGroup, description = '' } = body
+    const { emotion, scene, ageGroup, description = '', textLang } = body
 
     if (!emotion || !scene || !ageGroup) {
       return NextResponse.json({ error: '缺少必填字段：emotion, scene, ageGroup' }, { status: 400 })
@@ -19,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const story = await generateJSON<Story>(
       template.systemPrompt,
-      fillTemplate(template.userPromptTemplate, variables),
+      fillTemplate(template.userPromptTemplate, variables) + langInstruction(textLang),
     )
 
     return NextResponse.json(story)

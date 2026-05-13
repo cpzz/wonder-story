@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { APIKeyView, APIKeyInput, LLMSettings, PromptTemplate } from '@/types'
 
-type Tab = 'apikeys' | 'llm' | 'prompts'
+type Tab = 'settings' | 'prompts'
 type Message = { type: 'success' | 'error'; text: string }
 
 interface APIKeyFormData {
@@ -26,7 +26,7 @@ const PROVIDER_PRESETS = [
 ]
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>('apikeys')
+  const [tab, setTab] = useState<Tab>('settings')
   const [message, setMessage] = useState<Message | null>(null)
 
   // ── API Keys ──
@@ -151,7 +151,7 @@ export default function AdminPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-8 w-fit">
-          {([['apikeys', 'API Keys'], ['llm', 'LLM 配置'], ['prompts', '提示词模板']] as [Tab, string][]).map(([t, label]) => (
+          {([['settings', '大模型设置'], ['prompts', '提示词模板']] as [Tab, string][]).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
               {label}
@@ -159,84 +159,84 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* ── Tab: API Keys ── */}
-        {tab === 'apikeys' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800">API Key 管理</h2>
-              <button onClick={openAddKey} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-                添加 API Key
-              </button>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              {keys.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击右上角添加</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      {['名称', '提供商', '模型', 'Base URL', 'API Key', '图像生成', '操作'].map((h) => (
-                        <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {keys.map((k) => (
-                      <tr key={k.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-800">{k.name}</td>
-                        <td className="px-4 py-3 text-gray-600">{k.provider || '—'}</td>
-                        <td className="px-4 py-3 text-gray-600">{k.model || '—'}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs max-w-[160px] truncate" title={k.baseURL}>{k.baseURL || '—'}</td>
-                        <td className="px-4 py-3 font-mono text-gray-500 text-xs">{k.keyMasked}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-block w-2 h-2 rounded-full ${k.supportsImageGen ? 'bg-green-400' : 'bg-gray-300'}`} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button onClick={() => openEditKey(k)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">编辑</button>
-                            <button onClick={() => handleDeleteKey(k.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">删除</button>
-                          </div>
-                        </td>
+        {/* ── Tab: Settings (API Keys + LLM) ── */}
+        {tab === 'settings' && (
+          <div className="space-y-8">
+            {/* API Keys section */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-gray-800">API Key 管理</h2>
+                <button onClick={openAddKey} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+                  添加 API Key
+                </button>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                {keys.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击右上角添加</div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        {['名称', '提供商', '模型', 'Base URL', 'API Key', '图像生成', '操作'].map((h) => (
+                          <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {keys.map((k) => (
+                        <tr key={k.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-800">{k.name}</td>
+                          <td className="px-4 py-3 text-gray-600">{k.provider || '—'}</td>
+                          <td className="px-4 py-3 text-gray-600">{k.model || '—'}</td>
+                          <td className="px-4 py-3 text-gray-500 text-xs max-w-[160px] truncate" title={k.baseURL}>{k.baseURL || '—'}</td>
+                          <td className="px-4 py-3 font-mono text-gray-500 text-xs">{k.keyMasked}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-block w-2 h-2 rounded-full ${k.supportsImageGen ? 'bg-green-400' : 'bg-gray-300'}`} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button onClick={() => openEditKey(k)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">编辑</button>
+                              <button onClick={() => handleDeleteKey(k.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">删除</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* LLM Settings section */}
+            <div className="max-w-lg">
+              <h2 className="font-semibold text-gray-800 mb-4">大模型配置</h2>
+              <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
+                  <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                    <option value="">-- 选择 API Key --</option>
+                    {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
+                  <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                    <option value="">-- 选择 API Key --</option>
+                    {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
+                </div>
+                <button onClick={handleSaveLlm} disabled={llmSaving}
+                  className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
+                  {llmSaving ? '保存中...' : '保存配置'}
+                </button>
+              </div>
             </div>
           </div>
         )}
-
-        {/* ── Tab: LLM Settings ── */}
-        {tab === 'llm' && (
-          <div className="max-w-lg">
-            <h2 className="font-semibold text-gray-800 mb-4">LLM 配置</h2>
-            <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
-                <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  <option value="">-- 选择 API Key --</option>
-                  {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
-                </select>
-                <p className="text-xs text-gray-400 mt-1.5">用于生成绘本故事文字内容</p>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">绘图模型</label>
-                <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  <option value="">-- 选择 API Key --</option>
-                  {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
-                </select>
-                <p className="text-xs text-gray-400 mt-1.5">仅显示支持图像生成的 Key（需在 API Keys 中勾选）</p>
-              </div>
-              <button onClick={handleSaveLlm} disabled={llmSaving}
-                className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                {llmSaving ? '保存中...' : '保存配置'}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* ── Tab: Prompts ── */}
         {tab === 'prompts' && (
           <div>

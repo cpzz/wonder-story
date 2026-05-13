@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-const DATA_DIR = path.join(process.cwd(), 'data')
+const DATA_DIR = path.join(process.cwd(), 'user', 'settings')
 
 function ensureDataDir(): void {
   if (!fs.existsSync(DATA_DIR)) {

@@ -88,7 +88,7 @@ function EditableSelect({
 type ReaderPage =
   | { type: 'cover' }
   | { type: 'guide' }
-  | { type: 'story'; pageNumber: number; text: string; imagePrompt?: string }
+  | { type: 'story'; pageNumber: number; text: string; textEn?: string; imagePrompt?: string }
 
 function BookReader({ book }: { book: BookItem }) {
   const isBedtime = book.mode === 'bedtime'
@@ -98,8 +98,8 @@ function BookReader({ book }: { book: BookItem }) {
     { type: 'cover' },
     { type: 'guide' },
     ...(book.pictureBook
-      ? book.pictureBook.pages.map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, imagePrompt: p.imagePrompt }))
-      : book.story.pages.map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text }))),
+      ? book.pictureBook.pages.map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn, imagePrompt: p.imagePrompt }))
+      : book.story.pages.map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn }))),
   ]
   const total = pages.length
 
@@ -114,23 +114,37 @@ function BookReader({ book }: { book: BookItem }) {
   // Reset when book changes
   useEffect(() => { setIdx(0); setPlaying(false); speechSynthesis.cancel() }, [book.id])
 
-  // Load TTS voices (prefer Chinese)
+  // Load TTS voices filtered by book language
   useEffect(() => {
     const load = () => {
       const all = speechSynthesis.getVoices()
-      const zh = all.filter((v) => v.lang.startsWith('zh'))
-      setVoices(zh.length ? zh : all)
+      const textLang = book.textLang ?? 'zh'
+      if (textLang === 'en') {
+        const en = all.filter((v) => v.lang.startsWith('en'))
+        setVoices(en.length ? en : all)
+      } else if (textLang === 'bilingual') {
+        const zhEn = all.filter((v) => v.lang.startsWith('zh') || v.lang.startsWith('en'))
+        setVoices(zhEn.length ? zhEn : all)
+      } else {
+        const zh = all.filter((v) => v.lang.startsWith('zh'))
+        setVoices(zh.length ? zh : all)
+      }
     }
     load()
     speechSynthesis.addEventListener('voiceschanged', load)
     return () => speechSynthesis.removeEventListener('voiceschanged', load)
-  }, [])
+  }, [book.id, book.textLang])
 
   const pageText = useCallback((p: ReaderPage): string => {
     if (p.type === 'cover') return book.title
     if (p.type === 'guide') return book.guide.message + ' ' + book.guide.tips.join('。')
+    // For bilingual books, pick language matching the selected voice
+    if (book.textLang === 'bilingual' && p.type === 'story' && p.textEn) {
+      const voiceLang = voices[voiceIdx]?.lang ?? ''
+      return voiceLang.startsWith('en') ? p.textEn : p.text
+    }
     return p.text
-  }, [book])
+  }, [book, voices, voiceIdx])
 
   const speak = useCallback((p: ReaderPage) => {
     speechSynthesis.cancel()
@@ -243,7 +257,15 @@ function BookReader({ book }: { book: BookItem }) {
               style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)` }}>
               <span className="text-8xl">{cover.emoji}</span>
             </div>
-            <p className="text-gray-800 text-xl leading-relaxed font-medium text-center px-2">{cur.text}</p>
+            {book.textLang === 'bilingual' && cur.textEn ? (
+              <div className="space-y-3 px-2 text-center">
+                <p className="text-gray-800 text-xl leading-relaxed font-medium">{cur.text}</p>
+                <div className="border-t border-gray-100" />
+                <p className="text-gray-500 text-base leading-relaxed italic">{cur.textEn}</p>
+              </div>
+            ) : (
+              <p className="text-gray-800 text-xl leading-relaxed font-medium text-center px-2">{cur.text}</p>
+            )}
             {cur.imagePrompt && (
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                 <p className="text-xs text-gray-400 font-medium mb-1">🎨 插画提示词</p>
@@ -386,6 +408,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
+  const [textLang, setTextLang] = useState<'zh' | 'en' | 'bilingual'>('zh')
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -430,7 +453,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       storyOnly = true
     }
     setError(null); setGenerating(true)
-    const input = { emotion, scene, ageGroup, description, mode, theme }
+    const input = { emotion, scene, ageGroup, description, mode, theme, textLang }
     try {
       setGenStep(mode === 'bedtime' ? '准备睡前小贴士...' : '正在分析情绪...')
       const guideRes = await fetch('/api/trouble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
@@ -457,7 +480,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       const book: BookItem = await saveRes.json()
 
       onCreated(book); onClose()
-      setEmotion(''); setScene(''); setAgeGroup(''); setDescription(''); setTheme('')
+      setEmotion(''); setScene(''); setAgeGroup(''); setDescription(''); setTheme(''); setTextLang('zh')
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试')
     } finally { setGenerating(false); setGenStep('') }
@@ -535,6 +558,23 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
               <textarea value={description} onChange={(e) => setDescription(e.target.value)}
                 placeholder={mode === 'bedtime' ? '孩子喜欢的角色、特别的元素…' : '描述孩子的具体情况，帮助生成更贴心的故事...'}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
+            </div>
+
+            {/* Language selector */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">故事语言</label>
+              <div className="flex gap-2">
+                {([['zh', '中文'], ['en', 'English'], ['bilingual', '双语']] as const).map(([val, label]) => (
+                  <button key={val} type="button" onClick={() => setTextLang(val)}
+                    className={`flex-1 py-2 rounded-xl border text-sm font-medium transition-colors ${
+                      textLang === val
+                        ? 'bg-purple-600 border-purple-600 text-white'
+                        : 'border-gray-200 text-gray-600 hover:border-purple-300 hover:text-purple-600'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex gap-3 pt-1">

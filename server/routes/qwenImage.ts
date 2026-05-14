@@ -2,11 +2,22 @@ import { Router } from 'express'
 import { getActiveLLMKey } from '@/lib/configStore'
 import { decrypt } from '@/lib/crypto'
 import { getBookById, saveImage, hasImage, saveRefImage, hasRefImage, updateBook } from '@/lib/booksStore'
+import { getStylePrompt } from '@/lib/illustrationStyles'
 import type { CharacterCard } from '@/types'
 
 const DASHSCOPE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 
 const NEGATIVE_PROMPT = '低分辨率，低画质，肢体畸形，手指畸形，多余肢体，缺少肢体，穿模，模型穿插，身体扭曲，比例失调，脸部变形，五官错乱，眼睛不对称，多只眼睛，多张嘴，额外的头，关节异常，骨骼扭曲，身体部位重叠，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感，构图混乱，文字模糊，扭曲，恐怖，怪异。'
+
+// Minimum gap between consecutive Qwen image API calls (ms)
+const REQUEST_INTERVAL_MS = 3000
+// Delay after a 429 before retrying (doubles each attempt)
+const RETRY_BASE_DELAY_MS = 5000
+const MAX_RETRIES = 4
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+let lastRequestTime = 0
+
 
 interface QwenImageRequest {
   prompt: string
@@ -65,36 +76,58 @@ async function callQwenImageAPI(
     },
   }
 
-  const response = await fetch(DASHSCOPE_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  })
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // Enforce minimum interval between requests
+    const elapsed = Date.now() - lastRequestTime
+    if (elapsed < REQUEST_INTERVAL_MS) {
+      await sleep(REQUEST_INTERVAL_MS - elapsed)
+    }
+    lastRequestTime = Date.now()
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`qwen-image API 请求失败: ${response.status} ${errorText}`)
+    const response = await fetch(DASHSCOPE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (response.status === 429) {
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
+        console.warn(`[qwen-image] 429 限流，${delay / 1000}s 后重试 (${attempt + 1}/${MAX_RETRIES})...`)
+        await sleep(delay)
+        continue
+      }
+      const errorText = await response.text()
+      throw new Error(`qwen-image API 请求失败: 429 ${errorText}`)
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`qwen-image API 请求失败: ${response.status} ${errorText}`)
+    }
+
+    const data = await response.json() as QwenImageResponse
+
+    if (data.code || data.message) {
+      throw new Error(`图片生成失败: ${data.code} ${data.message}`)
+    }
+
+    // Simple format: output.results[].url (qwen-image-plus / sync)
+    // Multimodal format: output.choices[].message.content[].image
+    const imageUrl =
+      data.output?.results?.[0]?.url ??
+      data.output?.choices?.[0]?.message?.content?.[0]?.image
+    if (!imageUrl) {
+      throw new Error('图片生成 API 返回了空结果')
+    }
+
+    return imageUrl
   }
 
-  const data = await response.json() as QwenImageResponse
-
-  if (data.code || data.message) {
-    throw new Error(`图片生成失败: ${data.code} ${data.message}`)
-  }
-
-  // Simple format: output.results[].url (qwen-image-plus / sync)
-  // Multimodal format: output.choices[].message.content[].image
-  const imageUrl =
-    data.output?.results?.[0]?.url ??
-    data.output?.choices?.[0]?.message?.content?.[0]?.image
-  if (!imageUrl) {
-    throw new Error('图片生成 API 返回了空结果')
-  }
-
-  return imageUrl
+  throw new Error('图片生成超过最大重试次数')
 }
 
 async function downloadImage(url: string): Promise<Buffer> {
@@ -225,7 +258,8 @@ router.post('/generate', async (req, res) => {
       .map((c) => c.refImageUrl)
       .filter((u): u is string => !!u && u.startsWith('http'))
       .slice(0, 3)
-    console.log(`[qwen-image] 角色档案卡: ${characters.length} 个, 参考图URL: ${referenceUrls.length} 个`)
+    const stylePrompt = getStylePrompt(book.illustrationStyleId)
+    console.log(`[qwen-image] 角色档案卡: ${characters.length} 个, 参考图URL: ${referenceUrls.length} 个, 风格: ${book.illustrationStyleId ?? 'watercolor'}`)
     const results: Array<{ pageNumber: number; success: boolean; error?: string }> = []
 
     // ── Cover image (pageNumber 0) ──────────────────────────────
@@ -234,7 +268,7 @@ router.post('/generate', async (req, res) => {
       try {
         console.log('[qwen-image] 正在生成封面图片...')
         const imageUrl = await callQwenImageAPI(plainKey, modelName, {
-          prompt: book.pictureBook.coverPrompt + charDesc,
+          prompt: book.pictureBook.coverPrompt + ', ' + stylePrompt + charDesc,
           size: size || '1024*1024',
           referenceUrls,
         })
@@ -264,7 +298,7 @@ router.post('/generate', async (req, res) => {
 
         console.log(`[qwen-image] 正在生成第 ${page.pageNumber} 页图片...`)
         const imageUrl = await callQwenImageAPI(plainKey, modelName, {
-          prompt: page.imagePrompt + charDesc,
+          prompt: page.imagePrompt + ', ' + stylePrompt + charDesc,
           size: size || '1024*1024',
           referenceUrls,
         })

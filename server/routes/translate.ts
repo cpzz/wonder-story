@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { generateJSON } from '@/lib/llm'
 import { fillTemplate } from '@/lib/templateUtils'
+import { getStylePrompt, getStyleName } from '@/lib/illustrationStyles'
 import type { Story, Guide, PictureBook, PictureBookPage, CharacterCard } from '@/types'
 
-const TRANSLATE_SYSTEM = `You are a professional children's book translator and illustrator.
+const TRANSLATE_SYSTEM_BASE = `You are a professional children's book translator and illustrator.
 Rules you MUST follow:
 - Translate ONLY the text values marked with "textEn": "". Do NOT add, infer, or explain anything.
 - Fill in every "textEn" field with the English translation of the corresponding "text" field.
@@ -11,7 +12,6 @@ Rules you MUST follow:
 - Return ONLY valid JSON with the exact same structure as the input.
 - Do NOT change any other fields.
 
-Image style for all imagePrompts: soft watercolor, children's picture book, warm and cozy.
 Character consistency rules (apply to every imagePrompt):
 - Family members (parents, children, siblings) MUST be the same type of being: if the protagonist is human, the whole family is human; if the protagonist is an animal, the whole family is the same species. Never mix species within a family.
 - Character sizes must be realistic and consistent throughout: adults are clearly larger than children, same-age characters have similar proportions. Never let a character appear abnormally large or small across pages.
@@ -22,6 +22,13 @@ Image quality rules (apply to every imagePrompt):
 - Keep compositions simple and uncluttered. Each character should have enough space to avoid body parts merging or intersecting.
 - Do NOT describe partial or cropped body parts — if a character appears, describe their full figure or at minimum from the waist up with both arms visible.
 - Avoid describing multiple characters in tight overlapping positions that would cause clipping or body part confusion.`
+
+const DEFAULT_STYLE = "soft watercolor, children's picture book, warm and cozy"
+
+function buildTranslateSystem(styleId?: string): string {
+  const style = getStylePrompt(styleId) ?? DEFAULT_STYLE
+  return TRANSLATE_SYSTEM_BASE + `\n\nImage style for all imagePrompts: ${style}.`
+}
 
 // Build character reference string for imagePrompt generation
 function buildCharacterRef(characters: CharacterCard[]): string {
@@ -48,8 +55,8 @@ const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { story, guide, characters = [], textLang }: {
-      story: Story; guide: Guide; characters?: CharacterCard[]; textLang: string
+    const { story, guide, characters = [], textLang, illustrationStyleId }: {
+      story: Story; guide: Guide; characters?: CharacterCard[]; textLang: string; illustrationStyleId?: string
     } = req.body
 
     const sortedPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
@@ -88,8 +95,8 @@ ${characterRef}
 Return the completed JSON only:
 ${JSON.stringify(input, null, 2)}`
 
-    console.log('[translate] calling LLM, pages:', sortedPages.length, 'characters:', characters.length)
-    const result = await generateJSON<BundleInput>(TRANSLATE_SYSTEM, userPrompt, 'story', 8192)
+    console.log(`[translate] calling LLM, pages: ${sortedPages.length} characters: ${characters.length} style: ${getStyleName(illustrationStyleId)}`)
+    const result = await generateJSON<BundleInput>(buildTranslateSystem(illustrationStyleId), userPrompt, 'story', 8192)
     console.log('[translate] LLM returned title textEn:', result.story?.title?.textEn, 'first imagePrompt:', result.story?.pages?.[0]?.imagePrompt?.slice(0, 60))
 
     const resultPages = [...(result.story?.pages ?? [])].sort((a, b) => a.pageNumber - b.pageNumber)

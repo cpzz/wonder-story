@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { jsonrepair } from 'jsonrepair'
 import { getActiveLLMKey } from './configStore'
 import { decrypt } from './crypto'
 import type { APIKey } from '@/types'
@@ -25,116 +26,11 @@ function createClientFromKey(apiKey: APIKey): OpenAI {
 function cleanJSON(content: string): string {
   // Strip markdown code fences
   const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fenced) return repairJSON(fenced[1].trim())
-  // Extract first {...} or [...] block using greedy match for nested objects
+  if (fenced) return jsonrepair(fenced[1].trim())
+  // Extract first {...} or [...] block
   const obj = content.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
-  if (obj) return repairJSON(obj[1].trim())
-  return repairJSON(content.trim())
-}
-
-// Fix common LLM JSON output issues: unescaped control characters inside string values
-function repairJSON(raw: string): string {
-  let result = ''
-  let inString = false
-  let escaped = false
-
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i]
-
-    if (escaped) {
-      result += ch
-      escaped = false
-      continue
-    }
-
-    if (ch === '\\') {
-      escaped = true
-      result += ch
-      continue
-    }
-
-    if (ch === '"') {
-      inString = !inString
-      result += ch
-      continue
-    }
-
-    if (inString) {
-      if (ch === '\n')       { result += '\\n'; continue }
-      if (ch === '\r')       { result += '\\r'; continue }
-      if (ch === '\t')       { result += '\\t'; continue }
-      // Strip other control characters
-      if (ch.charCodeAt(0) < 0x20) continue
-    }
-
-    result += ch
-  }
-
-  return result
-}
-
-// Attempt to fix broken JSON with unescaped quotes in values
-function tryFixBrokenJSON(raw: string): string {
-  // Try parsing first
-  try {
-    JSON.parse(raw)
-    return raw
-  } catch { /* continue with fixes */ }
-
-  // Fix 1: Replace unescaped newlines with \n, \r, \t
-  let fixed = raw.replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-
-  // Fix 2: Try to find and escape internal quotes
-  // Walk through and track state to find unescaped quotes inside strings
-  let result = ''
-  let inString = false
-  let escaped = false
-  let lastKeyPos = -1
-  let valueStart = -1
-
-  for (let i = 0; i < fixed.length; i++) {
-    const ch = fixed[i]
-
-    if (escaped) {
-      result += ch
-      escaped = false
-      continue
-    }
-
-    if (ch === '\\') {
-      escaped = true
-      result += ch
-      continue
-    }
-
-    if (ch === '"') {
-      // Track if we're entering a key or value
-      if (!inString) {
-        // Opening quote
-        const trimmed = result.trim()
-        const lastChar = trimmed.length > 0 ? trimmed[trimmed.length - 1] : ''
-        if (lastChar === ':' || lastChar === '{' || lastChar === ',') {
-          // This is a key
-          lastKeyPos = result.length
-        } else if (lastChar === '"' && i > 0) {
-          // This might be closing of previous value, skip
-        }
-      }
-      inString = !inString
-      result += ch
-      continue
-    }
-
-    if (inString && ch === '"') {
-      // Unescaped quote inside string - escape it
-      result += '\\"'
-      continue
-    }
-
-    result += ch
-  }
-
-  return result
+  if (obj) return jsonrepair(obj[1].trim())
+  return jsonrepair(content.trim())
 }
 
 export async function generateJSON<T>(
@@ -176,7 +72,6 @@ export async function generateJSON<T>(
   try {
     return JSON.parse(cleaned) as T
   } catch (parseError) {
-    // Log raw content for debugging
     console.error('[generateJSON] Failed to parse LLM response:', {
       raw: content,
       cleaned,

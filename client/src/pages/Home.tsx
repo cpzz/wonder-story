@@ -2,6 +2,22 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { BookItem, DropdownOptions, Guide, Story, PictureBook } from '@/types'
 import AdminPage from './Admin'
 
+// ── Illustration styles ──
+
+export const ILLUSTRATION_STYLES: { id: string; name: string }[] = [
+  { id: 'watercolor',   name: '清新水彩' },
+  { id: 'kawaii',       name: '可爱治愈' },
+  { id: 'flat',         name: '简约扁平' },
+  { id: 'cartoon',      name: '卡通夸张' },
+  { id: 'vintage',      name: '复古经典' },
+  { id: 'chinese',      name: '国风水墨' },
+  { id: 'collage',      name: '拼贴手工' },
+  { id: 'realistic',    name: '写实细腻' },
+  { id: 'printmaking',  name: '版画装饰' },
+]
+
+const DEFAULT_STYLE_ID = 'watercolor'
+
 // ── Cover art config ──
 
 const COVER_MAP: Record<string, { colors: [string, string]; emoji: string }> = {
@@ -479,6 +495,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
+  const [styleId, setStyleId] = useState(() => localStorage.getItem('wstory_style_id') ?? DEFAULT_STYLE_ID)
   const textLang: 'zh' | 'en' | 'bilingual' = 'bilingual'
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
@@ -542,7 +559,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       // ③ 正在生成故事内容（翻译 + 插画描述）...
       setGenStep('正在生成故事内容 ...')
       console.log('[generate] ③ 正在生成故事内容 ...')
-      const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang }) })
+      const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang, illustrationStyleId: styleId }) })
       if (!transRes.ok) throw new Error((await transRes.json()).error)
       const translated = await transRes.json()
       story = translated.story
@@ -553,7 +570,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       // ⑥ 正在保存...
       setGenStep('正在保存...')
       console.log('[generate] ⑥ 正在保存...')
-      const saveBody = { ...input, guide, story, characters, ...(pictureBook ? { pictureBook } : {}) }
+      const saveBody = { ...input, guide, story, characters, illustrationStyleId: styleId, ...(pictureBook ? { pictureBook } : {}) }
       const saveRes = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saveBody) })
       if (!saveRes.ok) throw new Error((await saveRes.json()).error)
       const book: BookItem = await saveRes.json()
@@ -640,7 +657,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 
             {/* Emotion mode */}
             {mode === 'emotion' && (<>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
                   <input type="number" min={2} max={14} value={ageGroup}
@@ -652,10 +669,19 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                   <EditableSelect value={emotion} options={options.emotions} placeholder="选择情绪..." onChange={setEmotion}
                     onAdd={(v) => handleAdd('emotions', v)} onDelete={(v) => handleDelete('emotions', v)} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">发生场景 <span className="text-red-400">*</span></label>
                   <EditableSelect value={scene} options={options.scenes} placeholder="选择场景..." onChange={setScene}
                     onAdd={(v) => handleAdd('scenes', v)} onDelete={(v) => handleDelete('scenes', v)} />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">插画风格<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                  <select value={styleId} onChange={(e) => { setStyleId(e.target.value); localStorage.setItem('wstory_style_id', e.target.value) }}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                    {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
@@ -680,6 +706,13 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                   <EditableSelect value={theme} options={options.themes} placeholder="选择或输入主题..." onChange={setTheme}
                     onAdd={(v) => handleAdd('themes', v)} onDelete={(v) => handleDelete('themes', v)} />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">插画风格<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <select value={styleId} onChange={(e) => { setStyleId(e.target.value); localStorage.setItem('wstory_style_id', e.target.value) }}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                  {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">额外想法<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
@@ -815,7 +848,7 @@ export default function HomePage() {
                       <div className="flex items-center gap-1.5">
                         <p className={`text-sm font-medium truncate ${isSelected ? 'text-purple-700' : 'text-gray-800'}`}>{displayTitle}</p>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{book.mode === 'bedtime' ? `🌙 ${book.theme || '睡前故事'}` : `💛 ${book.emotion}`} · {book.ageGroup}岁 · {book.story.pages.length}页 · {new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{book.mode === 'bedtime' ? `🌙 ${book.theme || '睡前故事'}` : `💛 ${book.emotion}`} · {book.ageGroup}岁 · {ILLUSTRATION_STYLES.find((s) => s.id === (book.illustrationStyleId ?? 'watercolor'))?.name ?? '清新水彩'} · {new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
                     </>)
                   })()}
                 </div>

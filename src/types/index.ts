@@ -137,6 +137,7 @@ export interface BookItem {
   mode?: 'emotion' | 'bedtime'
   theme?: string
   textLang?: TextLang
+  illustrationStyleId?: string
   characters?: CharacterCard[]
   guide: Guide
   story: Story

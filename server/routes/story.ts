@@ -3,13 +3,20 @@ import { generateJSON } from '@/lib/llm'
 import { getPromptByType } from '@/lib/promptStore'
 import { fillTemplate } from '@/lib/templateUtils'
 import { DEFAULT_STORY_TEMPLATE, DEFAULT_BEDTIME_STORY_TEMPLATE } from '@/lib/defaultPrompts'
-import type { TroubleInput, Story } from '@/types'
+import type { TroubleInput, Story, CharacterCard } from '@/types'
 
-// LLM always returns flat title string — use this raw type for parsing
-interface StoryRaw { title: string; pages: { pageNumber: number; text: string }[] }
+// LLM now returns characters + story in one response
+interface StoryRaw {
+  characters?: CharacterCard[]
+  title: string
+  pages: { pageNumber: number; text: string }[]
+}
 
-function wrapStory(raw: StoryRaw): Story {
-  return { title: { text: raw.title }, pages: raw.pages }
+function wrapStory(raw: StoryRaw): { characters: CharacterCard[]; story: Story } {
+  return {
+    characters: raw.characters ?? [],
+    story: { title: { text: raw.title }, pages: raw.pages },
+  }
 }
 
 const router = Router()
@@ -24,21 +31,30 @@ router.post('/', async (req, res) => {
       const themeHint = theme ? `故事主题偏好：${theme}。` : ''
       const descHint = description ? `额外要求：${description}` : ''
       const template = getPromptByType('bedtime-story') ?? { ...DEFAULT_BEDTIME_STORY_TEMPLATE, id: 'default' }
-      const story = wrapStory(await generateJSON<StoryRaw>(
+      console.log(`[story] bedtime mode, ageGroup=${ageGroup}, theme=${theme}`)
+      const raw = await generateJSON<StoryRaw>(
         template.systemPrompt,
         fillTemplate(template.userPromptTemplate, { ageGroup, theme: themeHint, description: descHint }),
-      ))
-      return res.json(story)
+        'story',
+        8192,
+      )
+      console.log(`[story] bedtime story done: title=${raw.title}, chars=${raw.characters?.length}, pages=${raw.pages?.length}`)
+      return res.json(wrapStory(raw))
     }
     if (!emotion || !scene) {
       return res.status(400).json({ error: '缺少必填字段: emotion, scene' })
     }
     const template = getPromptByType('story') ?? { ...DEFAULT_STORY_TEMPLATE, id: 'default' }
-    const story = wrapStory(await generateJSON<StoryRaw>(
+    const descHint = description ? `额外要求：${description}` : ''
+    console.log(`[story] emotion mode, emotion=${emotion}, scene=${scene}, ageGroup=${ageGroup}`)
+    const raw = await generateJSON<StoryRaw>(
       template.systemPrompt,
-      fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description }),
-    ))
-    res.json(story)
+      fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description: descHint }),
+      'story',
+      8192,
+    )
+    console.log(`[story] emotion story done: title=${raw.title}, chars=${raw.characters?.length}, pages=${raw.pages?.length}`)
+    res.json(wrapStory(raw))
   } catch (err) {
     console.error('[POST /api/story]', err)
     res.status(500).json({ error: '生成故事失败，请检查 LLM 配置' })

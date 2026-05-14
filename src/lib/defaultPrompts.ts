@@ -9,24 +9,64 @@ export const DEFAULT_STORY_TEMPLATE: TemplateBase = {
   systemPrompt: `你是一位专业的儿童绘本故事作家，擅长创作温暖、治愈的儿童故事。
 你的故事能够帮助孩子理解自己的情绪，以积极的方式处理生活中的挑战。
 
-创作要求：
+【第一步：设计角色档案卡】
+在写故事之前，先为故事设计 2-4 个主要角色，每个角色需包含：
+- name：角色名（中文）
+- nameEn：角色名（英文）
+- role：主角或配角
+- species：物种/种族（如小兔子、小熊、小女孩）
+- face：面部特征（脸型、眼型颜色、特殊标记）
+- color：毛发/肤色（主色、过渡色）
+- outfit：服饰（款式、颜色、配饰）
+- bodyType：体型比例（如"二头身Q版，圆润可爱"）
+- personality：性格特点和习惯动作
+- forbidden：绝对不能出现的特征
+- refPrompt：用于生成角色定妆图的英文 prompt（正面站姿、白色背景、儿童绘本风格）
+
+【第二步：用角色写故事】
+严格按照设计好的角色来写故事，确保每页的角色外形描述与档案卡一致。
+
+故事创作要求：
 - 语言简单温暖，贴近孩子的日常生活
-- 主角是一个与孩子年龄相近的可爱角色（小动物或小朋友）
 - 故事情节自然流畅，有清晰的开始、发展和结局
 - 结局积极向上，帮助孩子建立自信
-- 每页文字简短精炼，适合朗读（2-3句话）`,
+- 每页文字简短精炼，适合朗读（2-3句话）
+- 单页出场角色不超过3个
+
+【角色一致性规则】（设计阶段必须遵守）
+- 家庭成员（父母/子女/兄弟姐妹）必须是同一类生物：若主角是人类则全家都是人类，若主角是某种动物则全家都是同种动物，严禁混用物种
+- 角色大小比例要符合现实逻辑：成人明显比儿童高大，同龄角色体型相近，禁止同一角色忽大忽小
+- 同一角色在整本书每一页的外形、毛发/肤色、服饰必须完全一致，不得随意变化`,
 
   userPromptTemplate: `请为一个{ageGroup}岁的孩子创作一个关于"{emotion}"情绪的温暖绘本故事。
 故事主要场景在{scene}。
 {description}
 请以JSON格式返回（只返回JSON，不要其他内容）：
 {
+  "characters": [
+    {
+      "name": "角色名",
+      "nameEn": "Character Name",
+      "role": "主角",
+      "species": "物种",
+      "face": "面部特征",
+      "color": "毛发/肤色",
+      "outfit": "服饰描述",
+      "bodyType": "体型比例",
+      "personality": "性格特点",
+      "forbidden": "禁用元素",
+      "refPrompt": "English prompt for reference image"
+    }
+  ],
   "title": "故事标题",
   "pages": [
     {"pageNumber": 1, "text": "第一页内容"},
-    {"pageNumber": 2, "text": "第二页内容"}
+    {"pageNumber": 2, "text": "..."},
+    {"pageNumber": 6, "text": "第六页内容"}
   ]
-}`,
+}
+
+请生成完整的故事，共6-8页，每页2-3句话。`,
 }
 
 export const DEFAULT_IMAGE_TEMPLATE: TemplateBase = {
@@ -35,17 +75,21 @@ export const DEFAULT_IMAGE_TEMPLATE: TemplateBase = {
   meta: {},
   systemPrompt: `You are a professional children's book illustrator and art director.
 Your image descriptions are warm, colorful, and perfectly suited for children's picture books.
-Always describe scenes that feel safe, friendly, and magical for young children.`,
+Always describe scenes that feel safe, friendly, and magical for young children.
+Character consistency is critical: use the exact appearance details from the character descriptions provided.`,
   userPromptTemplate: `Create a detailed illustration description for a children's picture book page.
 
 Story title: {title}
 Page text: {pageText}
 Child's age: {ageGroup}
 
+Character reference (strictly follow these descriptions):
+{characterRef}
+
 Write a vivid English description for a watercolor children's book illustration.
-Include: main characters and actions, background setting, colors and mood.
+Include: which characters appear and their exact actions, background setting, colors and mood.
 Style: soft watercolor, children's book illustration, warm and cozy.
-Keep it under 100 words. Return only the description.`,
+Keep it under 120 words. Return only the description.`,
 }
 
 export const DEFAULT_GUIDE_TEMPLATE: TemplateBase = {
@@ -69,23 +113,61 @@ export const DEFAULT_BEDTIME_STORY_TEMPLATE: TemplateBase = {
   systemPrompt: `你是一位温柔的儿童睡前故事作家，擅长创作舒缓、充满想象力的睡前故事。
 你的故事节奏缓慢温和，充满诗意，能够帮助孩子放松身心、进入甜蜜的梦乡。
 
+【第一步：设计角色档案卡】
+在写故事之前，先为故事设计 2-3 个主要角色，每个角色需包含：
+- name：角色名（中文）
+- nameEn：角色名（英文）
+- role：主角或配角
+- species：物种/种族
+- face：面部特征
+- color：毛发/肤色
+- outfit：服饰
+- bodyType：体型比例
+- personality：性格特点
+- forbidden：禁用元素
+- refPrompt：用于生成角色定妆图的英文 prompt（正面站姿、白色背景、儿童绘本风格）
+
+【第二步：用角色写睡前故事】
 创作要求：
 - 语言轻柔舒缓，句子简短，节奏缓慢
 - 融入夜晚、星星、月亮、梦境等意象
 - 故事结局是主角安然入睡或进入美梦
 - 每页文字简短（2-3句话），适合家长轻声朗读
-- 充满温暖的想象，带来安全感和宁静感`,
+- 单页出场角色不超过3个
+
+【角色一致性规则】（设计阶段必须遵守）
+- 家庭成员（父母/子女/兄弟姐妹）必须是同一类生物：若主角是人类则全家都是人类，若主角是某种动物则全家都是同种动物，严禁混用物种
+- 角色大小比例要符合现实逻辑：成人明显比儿童高大，同龄角色体型相近，禁止同一角色忽大忽小
+- 同一角色在整本书每一页的外形、毛发/肤色、服饰必须完全一致，不得随意变化`,
   userPromptTemplate: `请为一个{ageGroup}岁的孩子创作一个温柔的睡前故事。
 {theme}
 {description}
 请以JSON格式返回（只返回JSON，不要其他内容）：
 {
+  "characters": [
+    {
+      "name": "角色名",
+      "nameEn": "Character Name",
+      "role": "主角",
+      "species": "物种",
+      "face": "面部特征",
+      "color": "毛发/肤色",
+      "outfit": "服饰描述",
+      "bodyType": "体型比例",
+      "personality": "性格特点",
+      "forbidden": "禁用元素",
+      "refPrompt": "English prompt for reference image"
+    }
+  ],
   "title": "故事标题",
   "pages": [
     {"pageNumber": 1, "text": "第一页内容"},
-    {"pageNumber": 2, "text": "第二页内容"}
+    {"pageNumber": 2, "text": "..."},
+    {"pageNumber": 6, "text": "第六页内容"}
   ]
-}`,
+}
+
+请生成完整的睡前故事，共6-8页，每页2-3句话。`,
 }
 
 export const DEFAULT_BEDTIME_GUIDE_TEMPLATE: TemplateBase = {

@@ -40,6 +40,37 @@ export function hasImage(id: string, pageNumber: number): boolean {
   return fs.existsSync(imagePath)
 }
 
+// ── Character reference images ───────────────────────────────────────────────
+
+function refsPath(id: string, charIndex: number): string {
+  return path.join(bookDir(id), 'refs', `${charIndex}.png`)
+}
+
+export function saveRefImage(id: string, charIndex: number, imageBuffer: Buffer): void {
+  const dir = path.join(bookDir(id), 'refs')
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(refsPath(id, charIndex), imageBuffer)
+}
+
+export function getRefImagePath(id: string, charIndex: number): string | undefined {
+  const p = refsPath(id, charIndex)
+  return fs.existsSync(p) ? p : undefined
+}
+
+export function hasRefImage(id: string, charIndex: number): boolean {
+  return fs.existsSync(refsPath(id, charIndex))
+}
+
+// ── Book mutation ────────────────────────────────────────────────────────────
+
+export function updateBook(id: string, updater: (book: BookItem) => BookItem): BookItem | undefined {
+  const book = getBookById(id)
+  if (!book) return undefined
+  const updated = updater(book)
+  fs.writeFileSync(bookFile(id), JSON.stringify(updated, null, 2), 'utf-8')
+  return updated
+}
+
 export function getBooks(): BookItem[] {
   ensureUsrDir()
   const entries = fs.readdirSync(USR_DIR, { withFileTypes: true })

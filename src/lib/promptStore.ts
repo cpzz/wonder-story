@@ -11,12 +11,21 @@ export function getPrompts(): PromptTemplate[] {
     writeJson(FILENAME, defaults)
     return defaults
   }
-  // Ensure any missing default types are added (migration)
+  // Always sync built-in default templates (id starts with 'default-') with latest code.
+  // User-created templates (custom ids) are preserved as-is.
   let updated = false
   for (const def of defaults) {
-    if (!stored.find((p) => p.type === def.type)) {
+    const idx = stored.findIndex((p) => p.id === def.id)
+    if (idx < 0) {
+      // Missing type — add it
       stored.push(def)
       updated = true
+    } else if (stored[idx].id.startsWith('default-')) {
+      // Built-in template — always overwrite with latest default content
+      if (stored[idx].systemPrompt !== def.systemPrompt || stored[idx].userPromptTemplate !== def.userPromptTemplate) {
+        stored[idx] = { ...def, updatedAt: new Date().toISOString() }
+        updated = true
+      }
     }
   }
   if (updated) writeJson(FILENAME, stored)

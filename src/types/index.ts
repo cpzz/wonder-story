@@ -88,15 +88,34 @@ export interface Story {
   pages: StoryPage[]
 }
 
+// ── Character Bible ──
+
+export interface CharacterCard {
+  name: string         // 角色名（中文）
+  nameEn: string       // 角色名（英文）
+  role: string         // 主角 / 配角
+  species: string      // 物种 / 种族
+  face: string         // 面部特征
+  color: string        // 毛发 / 肤色
+  outfit: string       // 服饰
+  bodyType: string     // 体型比例（如二头身Q版）
+  personality: string  // 性格 / 习惯动作
+  forbidden: string    // 禁用元素
+  refPrompt: string    // 生成定妆图的英文 prompt
+  refImageUrl?: string // 定妆图 URL（图像模型生成后填入）
+}
+
 export interface PictureBookPage {
   pageNumber: number
   text: string
   textEn?: string
   imagePrompt: string
+  imageUrl?: string    // 实际插图 URL（图像模型生成后填入）
 }
 
 export interface PictureBook {
   title: { text: string; textEn?: string }
+  coverPrompt?: string   // 封面插画描述（图像模型生成封面用）
   pages: PictureBookPage[]
 }
 
@@ -118,6 +137,7 @@ export interface BookItem {
   mode?: 'emotion' | 'bedtime'
   theme?: string
   textLang?: TextLang
+  characters?: CharacterCard[]
   guide: Guide
   story: Story
   pictureBook?: PictureBook

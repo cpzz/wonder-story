@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { getActiveLLMKey } from '@/lib/configStore'
 import { decrypt } from '@/lib/crypto'
-import { getBookById, saveImage, hasImage } from '@/lib/booksStore'
+import { getBookById, saveImage, hasImage, saveRefImage, hasRefImage, updateBook } from '@/lib/booksStore'
+import type { CharacterCard } from '@/types'
 
 const DASHSCOPE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 
@@ -14,6 +15,7 @@ interface QwenImageRequest {
   promptExtend?: boolean
   watermark?: boolean
   seed?: number
+  referenceUrls?: string[]  // Qwen CDN URLs of character reference images (max 3)
 }
 
 interface QwenImageResponse {
@@ -33,13 +35,18 @@ async function callQwenImageAPI(
   model: string,
   request: QwenImageRequest,
 ): Promise<string> {
+  const imageItems = (request.referenceUrls ?? []).slice(0, 3).map((url) => ({ image: url }))
+
   const body = {
     model,
     input: {
       messages: [
         {
           role: 'user',
-          content: [{ text: request.prompt }],
+          content: [
+            ...imageItems,
+            { text: request.prompt },
+          ],
         },
       ],
     },
@@ -90,7 +97,79 @@ async function downloadImage(url: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer)
 }
 
+import fs from 'fs'
+
+// Build character appearance description, referencing image positions when CDN URLs are available
+function buildCharacterDesc(characters: CharacterCard[]): string {
+  if (!characters.length) return ''
+  const lines = characters.map((c, i) => {
+    const imgRef = c.refImageUrl?.startsWith('http') ? ` [see Image ${i + 1}]` : ''
+    return `- ${c.nameEn} (${c.name})${imgRef}: ${c.species}, ${c.bodyType}. Face: ${c.face}. Color: ${c.color}. Outfit: ${c.outfit}. FORBIDDEN: ${c.forbidden}.`
+  }).join('\n')
+  return `\n\nCharacter reference (keep appearance STRICTLY consistent):\n${lines}`
+}
+
 const router = Router()
+
+// 生成角色定妆参考图
+router.post('/gen-refs', async (req, res) => {
+  try {
+    const { bookId }: { bookId: string } = req.body
+    if (!bookId) return res.status(400).json({ error: '缺少 bookId' })
+
+    const book = getBookById(bookId)
+    if (!book) return res.status(404).json({ error: '绘本不存在' })
+
+    const characters = book.characters ?? []
+    if (characters.length === 0) return res.json({ success: true, results: [] })
+
+    const keyConfig = getActiveLLMKey('picture')
+    if (!keyConfig) return res.status(400).json({ error: '未配置绘本图片模型' })
+
+    const plainKey = decrypt(keyConfig.keyEncrypted)
+    const modelName = keyConfig.model?.includes('edit') ? 'qwen-image-2.0-pro' : keyConfig.model
+    const results: Array<{ index: number; name: string; success: boolean; error?: string }> = []
+    const updatedCharacters = [...characters]
+
+    for (let i = 0; i < characters.length; i++) {
+      const c = characters[i]
+      if (!c.refPrompt) {
+        results.push({ index: i, name: c.name, success: false, error: '无 refPrompt' })
+        continue
+      }
+      if (hasRefImage(bookId, i)) {
+        updatedCharacters[i] = { ...c, refImageUrl: `/api/books/${bookId}/refs/${i}` }
+        results.push({ index: i, name: c.name, success: true, error: '已存在' })
+        continue
+      }
+      try {
+        console.log(`[qwen-image] 生成角色参考图 [${i}] ${c.nameEn}...`)
+        const cdnUrl = await callQwenImageAPI(plainKey, modelName, {
+          prompt: c.refPrompt,
+          size: '1024*1024',
+          promptExtend: false,
+        })
+        const buffer = await downloadImage(cdnUrl)
+        saveRefImage(bookId, i, buffer)
+        // Save the CDN URL so it can be passed as image reference in later generation calls
+        updatedCharacters[i] = { ...c, refImageUrl: cdnUrl }
+        console.log(`[qwen-image] 角色参考图 [${i}] ${c.nameEn} 已保存, cdnUrl=${cdnUrl.slice(0, 60)}...`)
+        results.push({ index: i, name: c.name, success: true })
+      } catch (err) {
+        console.error(`[qwen-image] 角色参考图 [${i}] ${c.nameEn} 生成失败:`, err)
+        results.push({ index: i, name: c.name, success: false, error: String(err) })
+      }
+    }
+
+    // Update book's characters with refImageUrl
+    updateBook(bookId, (b) => ({ ...b, characters: updatedCharacters }))
+
+    res.json({ success: true, results })
+  } catch (err) {
+    console.error('[POST /api/qwen-image/gen-refs]', err)
+    res.status(500).json({ error: '生成参考图失败' })
+  }
+})
 
 // 测试图片生成 API 连接
 router.post('/test', async (req, res) => {
@@ -129,14 +208,43 @@ router.post('/generate', async (req, res) => {
     const keyConfig = getActiveLLMKey('picture')
     if (!keyConfig) return res.status(400).json({ error: '未配置绘本图片模型' })
 
+    const plainKey = decrypt(keyConfig.keyEncrypted)
+    const modelName = keyConfig.model?.includes('edit') ? 'qwen-image-2.0-pro' : keyConfig.model
+    const characters = book.characters ?? []
+    const charDesc = buildCharacterDesc(characters)
+    const referenceUrls = characters
+      .map((c) => c.refImageUrl)
+      .filter((u): u is string => !!u && u.startsWith('http'))
+      .slice(0, 3)
+    console.log(`[qwen-image] 角色档案卡: ${characters.length} 个, 参考图URL: ${referenceUrls.length} 个`)
+    const results: Array<{ pageNumber: number; success: boolean; error?: string }> = []
+
+    // ── Cover image (pageNumber 0) ──────────────────────────────
+    const shouldGenCover = !pageNumbers || pageNumbers.includes(0)
+    if (shouldGenCover && book.pictureBook.coverPrompt && !hasImage(bookId, 0)) {
+      try {
+        console.log('[qwen-image] 正在生成封面图片...')
+        const imageUrl = await callQwenImageAPI(plainKey, modelName, {
+          prompt: book.pictureBook.coverPrompt + charDesc,
+          size: size || '1024*1024',
+          referenceUrls,
+        })
+        const buffer = await downloadImage(imageUrl)
+        saveImage(bookId, 0, buffer)
+        console.log('[qwen-image] 封面图片已保存')
+        results.push({ pageNumber: 0, success: true })
+      } catch (err) {
+        console.error('[qwen-image] 封面生成失败:', err)
+        results.push({ pageNumber: 0, success: false, error: String(err) })
+      }
+    }
+
+    // ── Regular pages ───────────────────────────────────────────
     const pages = book.pictureBook.pages
       .filter(p => !pageNumbers || pageNumbers.includes(p.pageNumber))
       .sort((a, b) => a.pageNumber - b.pageNumber)
 
-    if (pages.length === 0) return res.status(400).json({ error: '没有需要生成的页面' })
-
-    const plainKey = decrypt(keyConfig.keyEncrypted)
-    const results: Array<{ pageNumber: number; success: boolean; error?: string }> = []
+    if (results.length === 0 && pages.length === 0) return res.status(400).json({ error: '没有需要生成的页面' })
 
     for (const page of pages) {
       try {
@@ -146,10 +254,10 @@ router.post('/generate', async (req, res) => {
         }
 
         console.log(`[qwen-image] 正在生成第 ${page.pageNumber} 页图片...`)
-        const modelName = keyConfig.model?.includes('edit') ? 'qwen-image-2.0-pro' : keyConfig.model
         const imageUrl = await callQwenImageAPI(plainKey, modelName, {
-          prompt: page.imagePrompt,
+          prompt: page.imagePrompt + charDesc,
           size: size || '1024*1024',
+          referenceUrls,
         })
 
         console.log(`[qwen-image] 正在下载第 ${page.pageNumber} 页图片...`)

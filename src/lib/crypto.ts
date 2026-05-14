@@ -2,17 +2,16 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
-const DATA_DIR = path.join(process.cwd(), 'data')
-const KEY_FILE = path.join(DATA_DIR, '.key')
+const SETTINGS_DIR = path.join(process.cwd(), 'user', 'settings')
+const KEY_FILE = path.join(SETTINGS_DIR, '.key')
 
 function getEncryptionKey(): Buffer {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true })
+  if (!fs.existsSync(SETTINGS_DIR)) {
+    fs.mkdirSync(SETTINGS_DIR, { recursive: true })
   }
   if (!fs.existsSync(KEY_FILE)) {
-    const key = crypto.randomBytes(32)
-    fs.writeFileSync(KEY_FILE, key.toString('hex'), 'utf-8')
-    return key
+      const key = crypto.randomBytes(32)
+      fs.writeFileSync(KEY_FILE, key.toString('hex'), 'utf-8')
   }
   return Buffer.from(fs.readFileSync(KEY_FILE, 'utf-8').trim(), 'hex')
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getBooks, getBookById, saveBook, deleteBook, getImagePath } from '@/lib/booksStore'
+import { getBooks, getBookById, saveBook, deleteBook, getImagePath, getRefImagePath } from '@/lib/booksStore'
 import type { BookItem } from '@/types'
 
 const router = Router()
@@ -10,14 +10,15 @@ router.get('/', (_req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description, guide, story, pictureBook, mode, theme } = req.body
+    const { emotion, scene, ageGroup, description, guide, story, pictureBook, mode, theme, characters } = req.body
     if (!ageGroup || !guide || !story) {
       return res.status(400).json({ error: '缺少必填字段' })
     }
     const book: BookItem = saveBook({
       title: story.title,
-      emotion: emotion ?? '', scene: scene ?? '', ageGroup, description, guide, story, pictureBook, mode, theme,
+      emotion: emotion ?? '', scene: scene ?? '', ageGroup, description, guide, story, pictureBook, mode, theme, characters,
     })
+    console.log(`[books] saved book id=${book.id}, pages=${story.pages?.length}, chars=${characters?.length}, hasPictureBook=${!!pictureBook}`)
     res.status(201).json(book)
   } catch (err) {
     console.error('[POST /api/books]', err)
@@ -41,6 +42,13 @@ router.get('/:id/images/:pageNumber', (req, res) => {
   const { id, pageNumber } = req.params
   const imagePath = getImagePath(id, parseInt(pageNumber))
   if (!imagePath) return res.status(404).json({ error: '图片不存在' })
+  res.sendFile(imagePath)
+})
+
+router.get('/:id/refs/:index', (req, res) => {
+  const { id, index } = req.params
+  const imagePath = getRefImagePath(id, parseInt(index))
+  if (!imagePath) return res.status(404).json({ error: '参考图不存在' })
   res.sendFile(imagePath)
 })
 

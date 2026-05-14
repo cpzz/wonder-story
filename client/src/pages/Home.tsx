@@ -178,6 +178,7 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [guideOpen, setGuideOpen] = useState(false)
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({})
+  const [coverImageFailed, setCoverImageFailed] = useState(false)
 
   // Notify parent of active display language
   useEffect(() => {
@@ -190,6 +191,7 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
     setIdx(0); setPlaying(false); speechSynthesis.cancel()
     setVoiceLang(defaultVoiceLang(book.textLang))
     setVoiceEnabled(true)
+    setCoverImageFailed(false)
   }, [book.id])
 
   const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {
@@ -266,67 +268,99 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
         <div className="w-full max-w-lg mx-auto flex flex-col items-center">
         {cur.type === 'cover' && (
           <div className="w-full max-w-xs">
-            <div className="rounded-3xl overflow-hidden shadow-2xl"
-              style={{ background: `linear-gradient(135deg, ${cover.colors[0]}, ${cover.colors[1]})`, aspectRatio: '3/4' }}>
-              <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 pointer-events-none" style={{ position: 'relative' }} />
-              <div className="h-full relative flex flex-col justify-between p-8">
-                <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/10" />
-                <div className="absolute -bottom-12 -left-8 w-52 h-52 rounded-full bg-white/10" />
-                <div className="relative">
-                  <div className="text-7xl mb-6 drop-shadow-lg">{cover.emoji}</div>
-                  <h2 className="text-white font-bold text-2xl leading-snug drop-shadow">
-                    {voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text}
-                  </h2>
-                </div>
-                <div className="relative">
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {(isBedtime
-                      ? [book.theme || '睡前故事', `${book.ageGroup}岁`]
-                      : [book.emotion, book.scene, `${book.ageGroup}岁`]
-                    ).map((tag) => (
-                      <span key={tag} className="bg-white/20 text-white/90 text-xs px-2.5 py-0.5 rounded-full">{tag}</span>
-                    ))}
+            {/* Cover image (generated) */}
+            {!coverImageFailed && (
+              <img
+                src={`/api/books/${book.id}/images/0`}
+                alt="封面插画"
+                className="w-full rounded-3xl shadow-2xl object-cover"
+                style={{ aspectRatio: '3/4' }}
+                onError={() => setCoverImageFailed(true)}
+              />
+            )}
+            {/* Fallback gradient cover */}
+            {coverImageFailed && (
+              <div className="rounded-3xl overflow-hidden shadow-2xl"
+                style={{ background: `linear-gradient(135deg, ${cover.colors[0]}, ${cover.colors[1]})`, aspectRatio: '3/4' }}>
+                <div className="h-full relative flex flex-col justify-between p-8">
+                  <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/10" />
+                  <div className="absolute -bottom-12 -left-8 w-52 h-52 rounded-full bg-white/10" />
+                  <div className="relative">
+                    <div className="text-7xl mb-6 drop-shadow-lg">{cover.emoji}</div>
+                    <h2 className="text-white font-bold text-2xl leading-snug drop-shadow">
+                      {voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text}
+                    </h2>
                   </div>
-                  <p className="text-white/60 text-xs">{new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
+                  <div className="relative">
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {(isBedtime
+                        ? [book.theme || '睡前故事', `${book.ageGroup}岁`]
+                        : [book.emotion, book.scene, `${book.ageGroup}岁`]
+                      ).map((tag) => (
+                        <span key={tag} className="bg-white/20 text-white/90 text-xs px-2.5 py-0.5 rounded-full">{tag}</span>
+                      ))}
+                    </div>
+                    <p className="text-white/60 text-xs">{new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
+                    {hasPictureLLM && (
+                      <button
+                        onClick={() => handleGenerateImages(0)}
+                        disabled={generatingImages}
+                        className="mt-3 bg-white/20 hover:bg-white/30 text-white text-xs px-4 py-1.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        {generatingImages ? '生成中...' : '生成封面插画'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+            {/* Title below generated cover image */}
+            {!coverImageFailed && (
+              <h2 className="text-center font-bold text-gray-800 text-lg mt-3 leading-snug">
+                {voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text}
+              </h2>
+            )}
           </div>
         )}
 
         {cur.type === 'guide' && null}
 
         {cur.type === 'story' && (
-          <div className="w-full max-w-lg space-y-5">
-            {/* Image display */}
-            <img
-              src={`/api/books/${book.id}/images/${cur.pageNumber}`}
-              alt={`第${cur.pageNumber}页插画`}
-              className="w-full rounded-2xl shadow-lg object-cover"
-              style={{ aspectRatio: '1/1' }}
-              onLoad={() => setImageLoaded((prev) => ({ ...prev, [cur.pageNumber]: true }))}
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-                const placeholder = e.currentTarget.nextElementSibling as HTMLElement
-                if (placeholder) placeholder.style.display = 'flex'
-              }}
-            />
-            <div className="w-full rounded-2xl flex flex-col items-center justify-center py-14"
-              style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)`, display: 'none' }}>
-              <span className="text-8xl">{cover.emoji}</span>
-              {hasPictureLLM && (
-                <button
-                  onClick={() => handleGenerateImages(cur.pageNumber)}
-                  disabled={generatingImages}
-                  className="mt-4 bg-purple-600 hover:bg-purple-700 text-white text-sm px-5 py-2 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  {generatingImages ? '生成中...' : '生成插画'}
-                </button>
-              )}
+          <div className="w-full max-w-lg">
+            {/* Image with text overlay */}
+            <div className="relative rounded-2xl overflow-hidden shadow-lg" style={{ width: '100%', aspectRatio: '1/1' }}>
+              <img
+                src={`/api/books/${book.id}/images/${cur.pageNumber}`}
+                alt={`第${cur.pageNumber}页插画`}
+                className="w-full h-full object-cover"
+                onLoad={() => setImageLoaded((prev) => ({ ...prev, [cur.pageNumber]: true }))}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  const placeholder = e.currentTarget.nextElementSibling as HTMLElement
+                  if (placeholder) placeholder.style.display = 'flex'
+                }}
+              />
+              {/* Placeholder shown on error */}
+              <div className="absolute inset-0 flex-col items-center justify-center hidden"
+                style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)` }}>
+                <span className="text-8xl">{cover.emoji}</span>
+                {hasPictureLLM && (
+                  <button
+                    onClick={() => handleGenerateImages(cur.pageNumber)}
+                    disabled={generatingImages}
+                    className="mt-4 bg-purple-600 hover:bg-purple-700 text-white text-sm px-5 py-2 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    {generatingImages ? '生成中...' : '生成插画'}
+                  </button>
+                )}
+              </div>
+              {/* Text overlay at bottom */}
+              <div className="absolute bottom-0 left-0 right-0 px-4 py-4"
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 100%)' }}>
+                {(() => {
+                  const displayText = voiceLang === 'en' && cur.textEn ? cur.textEn : cur.text
+                  return <p className="text-white text-lg leading-snug font-medium text-center drop-shadow">{displayText}</p>
+                })()}
+              </div>
             </div>
-            {(() => {
-              const displayText = voiceLang === 'en' && cur.textEn ? cur.textEn : cur.text
-              return <p className="text-gray-800 text-xl leading-relaxed font-medium text-center px-2">{displayText}</p>
-            })()}
           </div>
         )}
         </div>
@@ -434,10 +468,6 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [confirmResolve, setConfirmResolve] = useState<null | { fn: (v: boolean) => void }>(null)
-
-  const showConfirm = (): Promise<boolean> =>
-    new Promise((resolve) => setConfirmResolve({ fn: resolve }))
 
   const persistOptions = (updated: DropdownOptions) => {
     onOptionsChange(updated)
@@ -468,58 +498,90 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       setError('请先在管理后台配置故事 LLM')
       return
     }
-    let storyOnly = false
-    if (!hasPictureLLM) {
-      const confirmed = await showConfirm()
-      if (!confirmed) return
-      storyOnly = true
-    }
     setError(null); setGenerating(true)
     const input = { emotion, scene, ageGroup, description, mode, theme, textLang }
     try {
+      // Guide (background step, no numbered display)
       setGenStep(mode === 'bedtime' ? '准备睡前小贴士...' : '正在分析情绪...')
+      console.log('[generate] 开始生成引导建议')
       const guideRes = await fetch('/api/trouble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
       if (!guideRes.ok) throw new Error((await guideRes.json()).error)
       let guide: Guide = await guideRes.json()
+      console.log('[generate] 引导建议完成')
 
-      setGenStep(mode === 'bedtime' ? '正在创作睡前故事...' : '正在创作专属故事...')
+      // ① 正在构建故事角色... → ② 正在创作专属故事... (timer, same LLM call)
+      setGenStep('正在构建故事角色...')
+      console.log('[generate] ① 正在构建故事角色...')
+      const storyStepTimer = setTimeout(() => {
+        setGenStep(mode === 'bedtime' ? '正在创作睡前故事...' : '正在创作专属故事...')
+        console.log('[generate] ② 正在创作专属故事...')
+      }, 6000)
       const storyRes = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+      clearTimeout(storyStepTimer)
       if (!storyRes.ok) throw new Error((await storyRes.json()).error)
-      let story: Story = await storyRes.json()
+      const storyData = await storyRes.json()
+      let story: Story = storyData.story ?? storyData
+      let characters = storyData.characters ?? []
+      console.log(`[generate] 故事+角色完成: ${story.pages?.length} 页, ${characters.length} 个角色`)
 
-      if (textLang === 'bilingual' || textLang === 'en') {
-        setGenStep('正在生成故事内容...')
-        const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, textLang }) })
-        if (!transRes.ok) throw new Error((await transRes.json()).error)
-        const translated = await transRes.json()
-        story = translated.story
-        guide = translated.guide
-      }
+      // ③ 正在生成故事内容（翻译 + 插画描述）...
+      setGenStep('正在生成故事内容 ...')
+      console.log('[generate] ③ 正在生成故事内容 ...')
+      const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang }) })
+      if (!transRes.ok) throw new Error((await transRes.json()).error)
+      const translated = await transRes.json()
+      story = translated.story
+      guide = translated.guide
+      let pictureBook: PictureBook | undefined = translated.pictureBook
+      console.log(`[generate] ③ 完成: ${pictureBook?.pages?.length} 页 imagePrompts, coverPrompt=${!!pictureBook?.coverPrompt}`)
 
-      let pictureBook: PictureBook | undefined
-      if (!storyOnly) {
-        setGenStep('正在生成绘本插画描述...')
-        const pbRes = await fetch('/api/picture-book', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, ageGroup }) })
-        if (!pbRes.ok) throw new Error((await pbRes.json()).error)
-        pictureBook = await pbRes.json()
-      }
-
+      // ⑥ 正在保存...
       setGenStep('正在保存...')
-      const saveBody = { ...input, guide, story, ...(pictureBook ? { pictureBook } : {}) }
+      console.log('[generate] ⑥ 正在保存...')
+      const saveBody = { ...input, guide, story, characters, ...(pictureBook ? { pictureBook } : {}) }
       const saveRes = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saveBody) })
       if (!saveRes.ok) throw new Error((await saveRes.json()).error)
       const book: BookItem = await saveRes.json()
+      console.log(`[generate] ⑥ 保存完成: bookId=${book.id}`)
 
-      if (book.id && pictureBook) {
-        setGenStep('正在生成插画...')
-        const imgRes = await fetch('/api/qwen-image/generate', {
+      if (hasPictureLLM && book.pictureBook) {
+        // ④ 正在绘制角色定妆图...
+        setGenStep('正在绘制角色定妆图...')
+        console.log('[generate] ④ 正在绘制角色定妆图...')
+        await fetch('/api/qwen-image/gen-refs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookId: book.id }),
-        })
-        if (!imgRes.ok) throw new Error('生成插画失败')
-        const imgData = await imgRes.json()
-        if (!imgData.success) throw new Error('部分插画生成失败')
+        }).catch(console.error)
+        console.log('[generate] ④ 角色定妆图完成')
+
+        // ⑤ 正在生成绘本插图（第 X/N 页）...  — page by page for live progress
+        const sortedPages = [...book.pictureBook.pages].sort((a, b) => a.pageNumber - b.pageNumber)
+        const hasCover = !!book.pictureBook.coverPrompt
+        const totalPages = sortedPages.length
+        let donePages = 0
+
+        if (hasCover) {
+          setGenStep('正在生成封面插图...')
+          console.log('[generate] ⑤ 生成封面插图')
+          await fetch('/api/qwen-image/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookId: book.id, pageNumbers: [0] }),
+          }).catch(console.error)
+        }
+
+        for (const page of sortedPages) {
+          donePages++
+          setGenStep(`正在生成绘本插图（第 ${donePages}/${totalPages} 页）...`)
+          console.log(`[generate] ⑤ 生成第 ${page.pageNumber} 页插图 (${donePages}/${totalPages})`)
+          await fetch('/api/qwen-image/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookId: book.id, pageNumbers: [page.pageNumber] }),
+          }).catch(console.error)
+        }
+        console.log('[generate] ⑤ 所有插图生成完成')
       }
 
       onCreated(book); onClose()
@@ -623,25 +685,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
             </div>
           </div>
         )}
-        {confirmResolve && (
-          <div className="absolute inset-0 bg-white/95 rounded-2xl flex flex-col items-center justify-center gap-6 px-8 z-10">
-            <p className="text-gray-700 text-center text-sm leading-relaxed font-medium">
-              绘本 LLM 未配置<br />是否只生成故事文本内容？
-            </p>
-            <div className="flex gap-3 w-full">
-              <button
-                onClick={() => { confirmResolve.fn(false); setConfirmResolve(null) }}
-                className="flex-1 border border-gray-200 text-gray-600 font-medium py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm">
-                取消
-              </button>
-              <button
-                onClick={() => { confirmResolve.fn(true); setConfirmResolve(null) }}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                只生成故事
-              </button>
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   )

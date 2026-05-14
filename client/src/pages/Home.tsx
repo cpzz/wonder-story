@@ -196,20 +196,17 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
 
   const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {
     if (!voiceEnabled || voiceLang === 'off') return null
+    if (p.type === 'cover') return null  // 封面不朗读
     const getStoredVoice = (lang: 'zh' | 'en') => {
       const all = speechSynthesis.getVoices()
       const name = localStorage.getItem(lang === 'zh' ? 'wstory_zh_voice' : 'wstory_en_voice')
       if (name) return all.find((v) => v.name === name) ?? all.find((v) => v.lang.startsWith(lang)) ?? null
       return all.find((v) => v.lang.startsWith(lang)) ?? null
     }
-    const baseText = p.type === 'cover'
-      ? (voiceLang === 'en' ? (book.title.textEn ?? book.title.text) : book.title.text)
-      : p.text
     if (voiceLang === 'en') {
-      return { text: p.type === 'cover' ? (book.title.textEn ?? book.title.text) : (p.textEn ?? p.text ?? ''), voice: getStoredVoice('en') }
+      return { text: p.textEn ?? p.text ?? '', voice: getStoredVoice('en') }
     }
-    // voiceLang === 'zh'
-    return { text: baseText, voice: getStoredVoice('zh') }
+    return { text: p.text, voice: getStoredVoice('zh') }
   }, [book, voiceLang, voiceEnabled])
 
   const speak = useCallback((p: ReaderPage) => {
@@ -368,7 +365,7 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
 
       {/* ── Navigation bar ── */}
       <div className="flex-shrink-0 border-t border-gray-100 bg-white py-3">
-        <div className="w-full flex items-center gap-3 px-6">
+        <div className="w-full flex items-center gap-2 px-4">
           {/* Guide button - leftmost */}
           <button onClick={() => setGuideOpen(true)}
             className="flex-shrink-0 px-2.5 h-9 flex items-center justify-center rounded-xl border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all text-xs font-medium whitespace-nowrap">
@@ -382,6 +379,15 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
                 className={`rounded-full transition-all ${i === idx ? 'w-4 h-2 bg-purple-600' : 'w-2 h-2 bg-gray-200 hover:bg-gray-300'}`} />
             ))}
           </div>
+
+          {/* To start */}
+          <button onClick={() => goTo(0)} disabled={idx === 0}
+            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            title="回到开始">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
+            </svg>
+          </button>
 
           {/* Prev */}
           <button onClick={prev} disabled={idx === 0}
@@ -411,6 +417,15 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
             className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          {/* To end */}
+          <button onClick={() => goTo(total - 1)} disabled={idx === total - 1}
+            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            title="跳到结尾">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M6 5l7 7-7 7" />
             </svg>
           </button>
 
@@ -460,7 +475,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 }) {
   const [emotion, setEmotion] = useState('')
   const [scene, setScene] = useState('')
-  const [ageGroup, setAgeGroup] = useState('6')
+  const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('wstory_age_group') ?? '6')
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
@@ -629,7 +644,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
                   <input type="number" min={2} max={14} value={ageGroup}
-                    onChange={(e) => setAgeGroup(e.target.value)} placeholder="2-14"
+                    onChange={(e) => { setAgeGroup(e.target.value); localStorage.setItem('wstory_age_group', e.target.value) }} placeholder="2-14"
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
                 </div>
                 <div>
@@ -657,7 +672,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
                   <input type="number" min={2} max={14} value={ageGroup}
-                    onChange={(e) => setAgeGroup(e.target.value)} placeholder="2-14"
+                    onChange={(e) => { setAgeGroup(e.target.value); localStorage.setItem('wstory_age_group', e.target.value) }} placeholder="2-14"
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
                 </div>
                 <div>
@@ -773,9 +788,23 @@ export default function HomePage() {
             return (
               <div key={book.id} onClick={() => setSelectedBook(book)}
                 className={`mx-2 my-0.5 px-3 py-3 rounded-xl cursor-pointer group flex items-center gap-3 transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
-                <div className="w-10 h-12 rounded-lg flex-shrink-0 flex items-center justify-center text-lg shadow-sm"
+                <div className="w-10 h-12 rounded-lg flex-shrink-0 overflow-hidden shadow-sm"
                   style={{ background: `linear-gradient(135deg, ${c.colors[0]}, ${c.colors[1]})` }}>
-                  {c.emoji}
+                  {book.id ? (
+                    <img
+                      src={`/api/books/${book.id}/images/0`}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                        const fb = e.currentTarget.nextElementSibling as HTMLElement
+                        if (fb) fb.style.display = 'flex'
+                      }}
+                    />
+                  ) : null}
+                  <div className="w-full h-full items-center justify-center text-lg hidden" style={{ display: book.id ? 'none' : 'flex' }}>
+                    {c.emoji}
+                  </div>
                 </div>
                 <div className="flex-1 min-w-0">
                   {(() => {

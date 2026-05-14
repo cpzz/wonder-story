@@ -1,8 +1,6 @@
 import { Router } from 'express'
 import { generateJSON } from '@/lib/llm'
-import { getPromptByType } from '@/lib/promptStore'
 import { fillTemplate } from '@/lib/templateUtils'
-import { DEFAULT_IMAGE_TEMPLATE } from '@/lib/defaultPrompts'
 import type { Story, Guide, PictureBook, PictureBookPage, CharacterCard } from '@/types'
 
 const TRANSLATE_SYSTEM = `You are a professional children's book translator and illustrator.
@@ -17,7 +15,13 @@ Image style for all imagePrompts: soft watercolor, children's picture book, warm
 Character consistency rules (apply to every imagePrompt):
 - Family members (parents, children, siblings) MUST be the same type of being: if the protagonist is human, the whole family is human; if the protagonist is an animal, the whole family is the same species. Never mix species within a family.
 - Character sizes must be realistic and consistent throughout: adults are clearly larger than children, same-age characters have similar proportions. Never let a character appear abnormally large or small across pages.
-- Each character's appearance (species, fur/skin color, outfit) must be identical across every page.`
+- Each character's appearance (species, fur/skin color, outfit) must be identical across every page.
+
+Image quality rules (apply to every imagePrompt):
+- Describe clear, natural poses with characters in stable, grounded positions. Avoid overlapping limbs, twisted joints, or unnatural body angles.
+- Keep compositions simple and uncluttered. Each character should have enough space to avoid body parts merging or intersecting.
+- Do NOT describe partial or cropped body parts — if a character appears, describe their full figure or at minimum from the waist up with both arms visible.
+- Avoid describing multiple characters in tight overlapping positions that would cause clipping or body part confusion.`
 
 // Build character reference string for imagePrompt generation
 function buildCharacterRef(characters: CharacterCard[]): string {
@@ -49,8 +53,6 @@ router.post('/', async (req, res) => {
     } = req.body
 
     const sortedPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
-    const imageTemplate = getPromptByType('image') ?? { ...DEFAULT_IMAGE_TEMPLATE, id: 'default' }
-    const titleText = story.title.textEn ?? story.title.text
     const characterRef = buildCharacterRef(characters)
 
     // Build imagePrompt placeholder per page (LLM will fill them)

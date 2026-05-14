@@ -69,29 +69,6 @@ export const DEFAULT_STORY_TEMPLATE: TemplateBase = {
 请生成完整的故事，共6-8页，每页2-3句话。`,
 }
 
-export const DEFAULT_IMAGE_TEMPLATE: TemplateBase = {
-  name: '默认插画描述模板',
-  type: 'image',
-  meta: {},
-  systemPrompt: `You are a professional children's book illustrator and art director.
-Your image descriptions are warm, colorful, and perfectly suited for children's picture books.
-Always describe scenes that feel safe, friendly, and magical for young children.
-Character consistency is critical: use the exact appearance details from the character descriptions provided.`,
-  userPromptTemplate: `Create a detailed illustration description for a children's picture book page.
-
-Story title: {title}
-Page text: {pageText}
-Child's age: {ageGroup}
-
-Character reference (strictly follow these descriptions):
-{characterRef}
-
-Write a vivid English description for a watercolor children's book illustration.
-Include: which characters appear and their exact actions, background setting, colors and mood.
-Style: soft watercolor, children's book illustration, warm and cozy.
-Keep it under 120 words. Return only the description.`,
-}
-
 export const DEFAULT_GUIDE_TEMPLATE: TemplateBase = {
   name: '默认引导建议模板',
   type: 'guide',
@@ -186,7 +163,6 @@ export function getDefaultPrompts(): PromptTemplate[] {
   const now = new Date().toISOString()
   return [
     { ...DEFAULT_STORY_TEMPLATE, id: 'default-story', createdAt: now, updatedAt: now },
-    { ...DEFAULT_IMAGE_TEMPLATE, id: 'default-image', createdAt: now, updatedAt: now },
     { ...DEFAULT_GUIDE_TEMPLATE, id: 'default-guide', createdAt: now, updatedAt: now },
     { ...DEFAULT_BEDTIME_STORY_TEMPLATE, id: 'default-bedtime-story', createdAt: now, updatedAt: now },
     { ...DEFAULT_BEDTIME_GUIDE_TEMPLATE, id: 'default-bedtime-guide', createdAt: now, updatedAt: now },

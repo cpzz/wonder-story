@@ -6,7 +6,7 @@ import type { CharacterCard } from '@/types'
 
 const DASHSCOPE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 
-const NEGATIVE_PROMPT = '低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感。构图混乱。文字模糊，扭曲。'
+const NEGATIVE_PROMPT = '低分辨率，低画质，肢体畸形，手指畸形，多余肢体，缺少肢体，穿模，模型穿插，身体扭曲，比例失调，脸部变形，五官错乱，眼睛不对称，多只眼睛，多张嘴，额外的头，关节异常，骨骼扭曲，身体部位重叠，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感，构图混乱，文字模糊，扭曲，恐怖，怪异。'
 
 interface QwenImageRequest {
   prompt: string
@@ -20,6 +20,7 @@ interface QwenImageRequest {
 
 interface QwenImageResponse {
   output?: {
+    results?: Array<{ url?: string }>
     choices?: Array<{
       message?: {
         content?: Array<{ image?: string }>
@@ -36,20 +37,24 @@ async function callQwenImageAPI(
   request: QwenImageRequest,
 ): Promise<string> {
   const imageItems = (request.referenceUrls ?? []).slice(0, 3).map((url) => ({ image: url }))
+  // qwen-image-2.0 series always uses input.messages format; older models use input.prompt
+  const isV2 = model.startsWith('qwen-image-2.')
 
   const body = {
     model,
-    input: {
-      messages: [
-        {
-          role: 'user',
-          content: [
-            ...imageItems,
-            { text: request.prompt },
+    input: isV2 || imageItems.length > 0
+      ? {
+          messages: [
+            {
+              role: 'user',
+              content: [
+                ...imageItems,
+                { text: request.prompt },
+              ],
+            },
           ],
-        },
-      ],
-    },
+        }
+      : { prompt: request.prompt },
     parameters: {
       size: request.size || '1024*1024',
       n: 1,
@@ -80,7 +85,11 @@ async function callQwenImageAPI(
     throw new Error(`图片生成失败: ${data.code} ${data.message}`)
   }
 
-  const imageUrl = data.output?.choices?.[0]?.message?.content?.[0]?.image
+  // Simple format: output.results[].url (qwen-image-plus / sync)
+  // Multimodal format: output.choices[].message.content[].image
+  const imageUrl =
+    data.output?.results?.[0]?.url ??
+    data.output?.choices?.[0]?.message?.content?.[0]?.image
   if (!imageUrl) {
     throw new Error('图片生成 API 返回了空结果')
   }

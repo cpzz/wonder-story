@@ -865,6 +865,13 @@ export default function HomePage() {
           ) : books.map((book) => {
             const c = book.mode === 'bedtime' ? getBedtimeCover(book.theme) : getCover(book.emotion)
             const isSelected = selectedBook?.id === book.id
+            const styleName =
+              ILLUSTRATION_STYLES.find((s) => s.id === (book.illustrationStyleId ?? 'watercolor'))?.name ?? '清新水彩'
+            const dateLabel = new Date(book.createdAt).toLocaleDateString('zh-CN')
+            const metaLine1 =
+              book.mode === 'bedtime'
+                ? `🌙 ${book.theme || '睡前故事'} · ${styleName}`
+                : `💛 ${book.emotion} · ${styleName}`
             return (
               <div key={book.id} onClick={() => setSelectedBook(book)}
                 className={`mx-2 my-0.5 px-3 py-3 rounded-xl cursor-pointer group flex items-center gap-3 transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
@@ -895,7 +902,8 @@ export default function HomePage() {
                       <div className="flex items-center gap-1.5">
                         <p className={`text-sm font-medium truncate ${isSelected ? 'text-purple-700' : 'text-gray-800'}`}>{displayTitle}</p>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{book.mode === 'bedtime' ? `🌙 ${book.theme || '睡前故事'}` : `💛 ${book.emotion}`} · {book.ageGroup}岁 · {ILLUSTRATION_STYLES.find((s) => s.id === (book.illustrationStyleId ?? 'watercolor'))?.name ?? '清新水彩'} · {new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
+                      <p className={`text-xs mt-0.5 truncate ${isSelected ? 'text-purple-600/80' : 'text-gray-400'}`}>{metaLine1}</p>
+                      <p className={`text-xs pl-4 mt-0.5 ${isSelected ? 'text-purple-600/70' : 'text-gray-400'}`}>{book.ageGroup}岁 · {dateLabel}</p>
                     </>)
                   })()}
                 </div>

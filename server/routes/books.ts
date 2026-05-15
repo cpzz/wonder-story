@@ -10,13 +10,37 @@ router.get('/', (_req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description, guide, story, pictureBook, mode, theme, characters, illustrationStyleId } = req.body
+    const {
+      emotion,
+      scene,
+      ageGroup,
+      description,
+      protagonistPreset,
+      guide,
+      story,
+      pictureBook,
+      mode,
+      theme,
+      characters,
+      illustrationStyleId,
+    } = req.body
     if (!ageGroup || !guide || !story) {
       return res.status(400).json({ error: '缺少必填字段' })
     }
     const book: BookItem = saveBook({
       title: story.title,
-      emotion: emotion ?? '', scene: scene ?? '', ageGroup, description, guide, story, pictureBook, mode, theme, characters, illustrationStyleId,
+      emotion: emotion ?? '',
+      scene: scene ?? '',
+      ageGroup,
+      description,
+      protagonistPreset,
+      guide,
+      story,
+      pictureBook,
+      mode,
+      theme,
+      characters,
+      illustrationStyleId,
     })
     console.log(`[books] saved book id=${book.id}, pages=${story.pages?.length}, chars=${characters?.length}, hasPictureBook=${!!pictureBook}, style=${illustrationStyleId ?? 'none'}`)
     res.status(201).json(book)

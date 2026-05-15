@@ -3,6 +3,7 @@ import { generateJSON } from '@/lib/llm'
 import { getPromptByType } from '@/lib/promptStore'
 import { fillTemplate } from '@/lib/templateUtils'
 import { DEFAULT_STORY_TEMPLATE, DEFAULT_BEDTIME_STORY_TEMPLATE } from '@/lib/defaultPrompts'
+import { buildProtagonistPromptSuffix } from '@/lib/protagonistPresets'
 import type { TroubleInput, Story, CharacterCard } from '@/types'
 
 // LLM now returns characters + story in one response
@@ -23,7 +24,8 @@ const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description = '', mode = 'emotion', theme = '' }: TroubleInput = req.body
+    const { emotion, scene, ageGroup, description = '', mode = 'emotion', theme = '', protagonistPreset }: TroubleInput =
+      req.body
     if (!ageGroup) {
       return res.status(400).json({ error: '缺少必填字段: ageGroup' })
     }
@@ -32,12 +34,10 @@ router.post('/', async (req, res) => {
       const descHint = description ? `额外要求：${description}` : ''
       const template = getPromptByType('bedtime-story') ?? { ...DEFAULT_BEDTIME_STORY_TEMPLATE, id: 'default' }
       console.log(`[story] bedtime mode, ageGroup=${ageGroup}, theme=${theme}`)
-      const raw = await generateJSON<StoryRaw>(
-        template.systemPrompt,
-        fillTemplate(template.userPromptTemplate, { ageGroup, theme: themeHint, description: descHint }),
-        'story',
-        8192,
-      )
+      const userPrompt =
+        fillTemplate(template.userPromptTemplate, { ageGroup, theme: themeHint, description: descHint }) +
+        buildProtagonistPromptSuffix(protagonistPreset)
+      const raw = await generateJSON<StoryRaw>(template.systemPrompt, userPrompt, 'story', 8192)
       console.log(`[story] bedtime story done: title=${raw.title}, chars=${raw.characters?.length}, pages=${raw.pages?.length}`)
       return res.json(wrapStory(raw))
     }
@@ -47,12 +47,10 @@ router.post('/', async (req, res) => {
     const template = getPromptByType('story') ?? { ...DEFAULT_STORY_TEMPLATE, id: 'default' }
     const descHint = description ? `额外要求：${description}` : ''
     console.log(`[story] emotion mode, emotion=${emotion}, scene=${scene}, ageGroup=${ageGroup}`)
-    const raw = await generateJSON<StoryRaw>(
-      template.systemPrompt,
-      fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description: descHint }),
-      'story',
-      8192,
-    )
+    const userPrompt =
+      fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description: descHint }) +
+      buildProtagonistPromptSuffix(protagonistPreset)
+    const raw = await generateJSON<StoryRaw>(template.systemPrompt, userPrompt, 'story', 8192)
     console.log(`[story] emotion story done: title=${raw.title}, chars=${raw.characters?.length}, pages=${raw.pages?.length}`)
     res.json(wrapStory(raw))
   } catch (err) {

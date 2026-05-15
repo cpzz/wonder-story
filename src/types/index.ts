@@ -71,6 +71,8 @@ export interface TroubleInput {
   scene: string
   ageGroup: string
   description?: string
+  /** 创作表单「主角选择」：默认「自动」，否则为预设物种/身份 */
+  protagonistPreset?: string
   pageCount?: number
   mode?: 'emotion' | 'bedtime'
   theme?: string
@@ -134,6 +136,7 @@ export interface BookItem {
   scene: string
   ageGroup: string
   description?: string
+  protagonistPreset?: string
   mode?: 'emotion' | 'bedtime'
   theme?: string
   textLang?: TextLang

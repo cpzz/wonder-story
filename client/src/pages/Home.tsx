@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { BookItem, DropdownOptions, Guide, Story, PictureBook } from '@/types'
+import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
 import AdminPage from './Admin'
 
 // ── Illustration styles ──
@@ -493,6 +494,9 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
   const [scene, setScene] = useState('')
   const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('wstory_age_group') ?? '6')
   const [description, setDescription] = useState('')
+  const [protagonistPreset, setProtagonistPreset] = useState(
+    () => localStorage.getItem('wstory_protagonist_preset') ?? '自动',
+  )
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
   const [styleId, setStyleId] = useState(() => localStorage.getItem('wstory_style_id') ?? DEFAULT_STYLE_ID)
@@ -531,7 +535,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       return
     }
     setError(null); setGenerating(true)
-    const input = { emotion, scene, ageGroup, description, mode, theme, textLang }
+    const input = { emotion, scene, ageGroup, description, protagonistPreset, mode, theme, textLang }
     try {
       // Guide (background step, no numbered display)
       setGenStep(mode === 'bedtime' ? '准备睡前小贴士...' : '正在分析情绪...')
@@ -685,6 +689,22 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                 </div>
               </div>
               <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">主角选择<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <select
+                  value={protagonistPreset}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setProtagonistPreset(v)
+                    localStorage.setItem('wstory_protagonist_preset', v)
+                  }}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white"
+                >
+                  {PROTAGONIST_PRESET_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">具体描述<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
                   placeholder="描述孩子的具体情况，帮助生成更贴心的故事..."
@@ -712,6 +732,22 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                 <select value={styleId} onChange={(e) => { setStyleId(e.target.value); localStorage.setItem('wstory_style_id', e.target.value) }}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                   {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">主角选择<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <select
+                  value={protagonistPreset}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setProtagonistPreset(v)
+                    localStorage.setItem('wstory_protagonist_preset', v)
+                  }}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                >
+                  {PROTAGONIST_PRESET_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
                 </select>
               </div>
               <div>

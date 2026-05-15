@@ -914,7 +914,7 @@ export default function HomePage() {
         )}
       </main>
       <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} options={options} onOptionsChange={setOptions} onCreated={handleCreated} />
-      {adminOpen && <AdminPage onClose={() => setAdminOpen(false)} />}
+      <AdminPage open={adminOpen} onClose={() => setAdminOpen(false)} />
     </div>
   )
 }

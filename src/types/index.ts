@@ -40,6 +40,18 @@ export interface LLMSettings {
   pictureLLMId: string
 }
 
+/** POST /api/admin/config/persist 中 apiKeys 的每一项：rowId 为已有 id，或以 new_ 开头的客户端草稿 id */
+export interface AdminPersistApiKeyInput {
+  rowId: string
+  name: string
+  provider: string
+  model: string
+  baseURL?: string
+  supportsImageGen: boolean
+  /** 新建时可选；非空表示设置密钥（与原先 POST /api/admin/api-keys 一致） */
+  apiKey?: string
+}
+
 // ── App Config ──
 
 export interface AppConfig {

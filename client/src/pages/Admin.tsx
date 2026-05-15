@@ -1,5 +1,27 @@
-import { useState, useEffect } from 'react'
-import type { APIKeyView, APIKeyInput, LLMSettings, PromptTemplate } from '@/types'
+import { useState, useEffect, useRef } from 'react'
+import type { APIKeyView, LLMSettings } from '@/types'
+
+type LocalKeyRow = APIKeyView & { pendingApiKey?: string }
+
+function isDraftKeyId(id: string): boolean {
+  return id.startsWith('new_')
+}
+
+function keysSnapshot(rows: LocalKeyRow[]): string {
+  return JSON.stringify(
+    [...rows]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((k) => ({
+        id: k.id,
+        name: k.name,
+        provider: k.provider,
+        model: k.model,
+        baseURL: k.baseURL ?? '',
+        supportsImageGen: k.supportsImageGen,
+        pendingSecret: Boolean(k.pendingApiKey),
+      })),
+  )
+}
 
 type Message = { type: 'success' | 'error'; text: string }
 
@@ -22,71 +44,75 @@ const PROVIDER_PRESETS = [
   { label: '移动云（cmecloud）', provider: 'cmecloud', model: '', baseURL: 'https://zhenze-huhehaote.cmecloud.cn/v1' },
 ]
 
-const PROMPT_SECTIONS = [
-  { type: 'story' as const, label: '情绪故事提示词', desc: '用于情绪故事模式的故事生成' },
-  { type: 'guide' as const, label: '情绪引导提示词', desc: '用于情绪模式的家长引导建议' },
-  { type: 'bedtime-story' as const, label: '睡前故事提示词', desc: '用于睡前模式的故事生成' },
-  { type: 'bedtime-guide' as const, label: '睡前引导提示词', desc: '用于睡前模式的家长引导建议' },
-]
-
-export default function AdminPage({ onClose }: { onClose: () => void }) {
+export default function AdminPage({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [message, setMessage] = useState<Message | null>(null)
   const [adminTab, setAdminTab] = useState<'llm' | 'tts'>('llm')
 
   // ── API Keys ──
-  const [keys, setKeys] = useState<APIKeyView[]>([])
+  const [keys, setKeys] = useState<LocalKeyRow[]>([])
   const [keyModalOpen, setKeyModalOpen] = useState(false)
-  const [editingKey, setEditingKey] = useState<APIKeyView | null>(null)
+  const [editingKey, setEditingKey] = useState<LocalKeyRow | null>(null)
   const [form, setForm] = useState<APIKeyFormData>(EMPTY_FORM)
-  const [keySaving, setKeySaving] = useState(false)
 
   // ── LLM Settings ──
   const [llm, setLlm] = useState<LLMSettings>({ storyLLMId: '', pictureLLMId: '' })
   const [llmSaving, setLlmSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const baselineRef = useRef<{ llm: LLMSettings; keysSig: string } | null>(null)
+  const [baselineReady, setBaselineReady] = useState(false)
 
   // ── TTS Voices ──
   const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([])
   const [selectedZhVoice, setSelectedZhVoice] = useState(() => localStorage.getItem('wstory_zh_voice') ?? '')
   const [selectedEnVoice, setSelectedEnVoice] = useState(() => localStorage.getItem('wstory_en_voice') ?? '')
 
-  // ── Prompts (simplified) ──
-  const [prompts, setPrompts] = useState<PromptTemplate[]>([])
-  const [editingPromptType, setEditingPromptType] = useState<string | null>(null)
-  const [promptEditForm, setPromptEditForm] = useState({ systemPrompt: '', userPromptTemplate: '' })
-  const [promptSaving, setPromptSaving] = useState(false)
-
-  const openEditPromptByType = (type: string, prompt?: PromptTemplate) => {
-    setEditingPromptType(type)
-    setPromptEditForm({ systemPrompt: prompt?.systemPrompt ?? '', userPromptTemplate: prompt?.userPromptTemplate ?? '' })
-  }
-
-  const handleSavePromptByType = async (type: string, existing?: PromptTemplate) => {
-    setPromptSaving(true)
-    try {
-      const sectionLabel = PROMPT_SECTIONS.find((s) => s.type === type)?.label ?? type
-      const res = existing
-        ? await fetch(`/api/admin/prompts/${existing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(promptEditForm) })
-        : await fetch('/api/admin/prompts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: sectionLabel, type, meta: {}, ...promptEditForm }) })
-      if (!res.ok) throw new Error((await res.json()).error)
-      const updated = await fetch('/api/admin/prompts').then((r) => r.json())
-      setPrompts(updated)
-      setEditingPromptType(null)
-      showMsg('success', '提示词已保存')
-    } catch (err) { showMsg('error', err instanceof Error ? err.message : '保存失败') }
-    finally { setPromptSaving(false) }
-  }
-
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text })
     setTimeout(() => setMessage(null), 3000)
   }
 
+  /** 每次打开设置窗口时从服务端 runtime 拉取最新 keys / llm，并重置本地基线与子模态 */
   useEffect(() => {
-    fetch('/api/admin/api-keys').then((r) => r.ok ? r.json() : []).then(setKeys)
-    fetch('/api/admin/llm-settings').then((r) => r.ok ? r.json() : null).then((d: LLMSettings | null) => { if (d && d.storyLLMId !== undefined) setLlm(d) })
-    fetch('/api/admin/prompts').then((r) => r.ok ? r.json() : []).then(setPrompts)
-  }, [])
+    if (!open) return
+    setKeyModalOpen(false)
+    setEditingKey(null)
+    setForm(EMPTY_FORM)
+    setMessage(null)
+    setAdminTab('llm')
+    setBaselineReady(false)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [kRes, lRes] = await Promise.all([fetch('/api/admin/api-keys'), fetch('/api/admin/llm-settings')])
+        const keyList: APIKeyView[] = kRes.ok ? await kRes.json() : []
+        const llmData: LLMSettings | null = lRes.ok ? await lRes.json() : null
+        if (cancelled) return
+        setKeys(keyList.map((k) => ({ ...k })))
+        if (llmData && llmData.storyLLMId !== undefined) {
+          const next: LLMSettings = {
+            storyLLMId: llmData.storyLLMId,
+            pictureLLMId: llmData.pictureLLMId ?? '',
+          }
+          setLlm(next)
+          baselineRef.current = { llm: next, keysSig: keysSnapshot(keyList) }
+        } else {
+          baselineRef.current = { llm: { storyLLMId: '', pictureLLMId: '' }, keysSig: keysSnapshot(keyList) }
+        }
+        setBaselineReady(true)
+      } catch {
+        if (!cancelled) setBaselineReady(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open])
+
+  useEffect(() => {
+    if (!open || !baselineReady || !baselineRef.current) return
+    const b = baselineRef.current
+    const llmDirty = llm.storyLLMId !== b.llm.storyLLMId || llm.pictureLLMId !== b.llm.pictureLLMId
+    const keysDirty = keysSnapshot(keys) !== b.keysSig
+    setDirty(llmDirty || keysDirty)
+  }, [open, keys, llm, baselineReady])
 
   useEffect(() => {
     const load = () => setAllVoices(speechSynthesis.getVoices())
@@ -97,77 +123,111 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
 
   // ── API Key handlers ──
   const openAddKey = () => { setEditingKey(null); setForm(EMPTY_FORM); setKeyModalOpen(true) }
-  const openEditKey = (k: APIKeyView) => { setEditingKey(k); setForm({ name: k.name, provider: k.provider ?? '', model: k.model ?? '', baseURL: k.baseURL ?? '', apiKey: '', supportsImageGen: k.supportsImageGen }); setKeyModalOpen(true) }
+  const openEditKey = (k: LocalKeyRow) => { setEditingKey(k); setForm({ name: k.name, provider: k.provider ?? '', model: k.model ?? '', baseURL: k.baseURL ?? '', apiKey: '', supportsImageGen: k.supportsImageGen }); setKeyModalOpen(true) }
   const closeKeyModal = () => { setKeyModalOpen(false); setEditingKey(null); setForm(EMPTY_FORM) }
-  const handleKeySubmit = async (e: React.FormEvent) => {
+  const handleKeySubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name) { showMsg('error', '请填写名称'); return }
-    setKeySaving(true)
-    try {
-      const body: Partial<APIKeyInput> = { name: form.name, provider: form.provider, model: form.model, baseURL: form.baseURL, supportsImageGen: form.supportsImageGen }
-      if (form.apiKey) body.apiKey = form.apiKey
-      const url = editingKey ? `/api/admin/api-keys/${editingKey.id}` : '/api/admin/api-keys'
-      const method = editingKey ? 'PUT' : 'POST'
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      if (!res.ok) throw new Error((await res.json()).error)
-      const updated = await fetch('/api/admin/api-keys').then((r) => r.json())
-      setKeys(updated)
+    if (!form.name.trim()) { showMsg('error', '请填写名称'); return }
+    if (!editingKey) {
+      const id = `new_${crypto.randomUUID()}`
+      const now = new Date().toISOString()
+      const secret = form.apiKey.trim()
+      const row: LocalKeyRow = {
+        id,
+        name: form.name.trim(),
+        provider: form.provider.trim(),
+        model: form.model.trim(),
+        baseURL: form.baseURL.trim() || undefined,
+        keyMasked: secret ? '（待保存）' : '（未填写）',
+        supportsImageGen: form.supportsImageGen,
+        createdAt: now,
+        updatedAt: now,
+      }
+      if (secret) row.pendingApiKey = secret
+      setKeys((prev) => [...prev, row])
       closeKeyModal()
-      if (!editingKey) setDirty(true)
-      showMsg('success', editingKey ? 'API Key 已更新' : 'API Key 已添加')
-    } catch (err) { showMsg('error', err instanceof Error ? err.message : '操作失败') }
-    finally { setKeySaving(false) }
+      return
+    }
+    setKeys((prev) => prev.map((row) => {
+      if (row.id !== editingKey.id) return row
+      const next: LocalKeyRow = {
+        ...row,
+        name: form.name.trim(),
+        provider: form.provider.trim(),
+        model: form.model.trim(),
+        baseURL: form.baseURL.trim() || undefined,
+        supportsImageGen: form.supportsImageGen,
+        updatedAt: new Date().toISOString(),
+      }
+      if (form.apiKey.trim()) {
+        next.pendingApiKey = form.apiKey.trim()
+        next.keyMasked = '（待保存）'
+      } else if (!isDraftKeyId(row.id)) {
+        delete next.pendingApiKey
+      }
+      return next
+    }))
+    closeKeyModal()
   }
-  const handleDeleteKey = async (id: string) => {
+  const handleDeleteKey = (id: string) => {
     if (!confirm('确认删除此 API Key？')) return
-    const res = await fetch(`/api/admin/api-keys/${id}`, { method: 'DELETE' })
-    if (res.ok) { setKeys((prev) => prev.filter((k) => k.id !== id)); showMsg('success', '已删除') }
-    else showMsg('error', '删除失败')
+    setKeys((prev) => prev.filter((k) => k.id !== id))
+    setLlm((prev) => ({
+      storyLLMId: prev.storyLLMId === id ? '' : prev.storyLLMId,
+      pictureLLMId: prev.pictureLLMId === id ? '' : prev.pictureLLMId,
+    }))
   }
 
   // ── LLM Settings handlers ──
-  const handleSaveLlm = async () => {
+  const handlePersistConfig = async () => {
     setLlmSaving(true)
     try {
-      const res = await fetch('/api/admin/llm-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(llm) })
-      if (!res.ok) throw new Error((await res.json()).error)
+      const apiKeys = keys.map((k) => {
+        const row: {
+          rowId: string
+          name: string
+          provider: string
+          model: string
+          baseURL?: string
+          supportsImageGen: boolean
+          apiKey?: string
+        } = {
+          rowId: k.id,
+          name: k.name,
+          provider: k.provider ?? '',
+          model: k.model ?? '',
+          baseURL: k.baseURL,
+          supportsImageGen: k.supportsImageGen,
+        }
+        if (k.pendingApiKey?.trim()) row.apiKey = k.pendingApiKey.trim()
+        return row
+      })
+      const res = await fetch('/api/admin/config/persist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ llmSettings: llm, apiKeys }),
+      })
+      let errMsg = '保存失败'
+      if (!res.ok) {
+        try {
+          const j = await res.json()
+          if (typeof j.error === 'string') errMsg = j.error
+        } catch { /* ignore */ }
+        throw new Error(errMsg)
+      }
+      if (baselineRef.current) {
+        baselineRef.current = { llm: { ...llm }, keysSig: keysSnapshot(keys) }
+      }
       setDirty(false)
-      showMsg('success', '设置已保存')
+      onClose()
     } catch (err) { showMsg('error', err instanceof Error ? err.message : '保存失败') }
     finally { setLlmSaving(false) }
   }
-
-  // ── Prompt handlers ──
-  const openAddPrompt = () => { setEditingPrompt(null); setPromptForm({ name: '', type: '', systemPrompt: '', userPromptTemplate: '' }) }
-  const openEditPrompt = (p: PromptTemplate) => { setEditingPrompt(p); setPromptForm({ name: p.name, type: p.type, systemPrompt: p.systemPrompt, userPromptTemplate: p.userPromptTemplate }) }
-  const cancelPrompt = () => { setEditingPrompt(null); setPromptForm({ name: '', type: '', systemPrompt: '', userPromptTemplate: '' }) }
-  const handleSavePrompt = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!promptForm.name || !promptForm.type) { showMsg('error', '请填写名称和类型'); return }
-    setPromptSaving(true)
-    try {
-      const body = editingPrompt ? { id: editingPrompt.id, ...promptForm } : promptForm
-      const res = await fetch(editingPrompt ? `/api/admin/prompts/${editingPrompt.id}` : '/api/admin/prompts', {
-        method: editingPrompt ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      const updated = await fetch('/api/admin/prompts').then((r) => r.json())
-      setPrompts(updated)
-      cancelPrompt()
-      showMsg('success', editingPrompt ? '提示词已更新' : '提示词已添加')
-    } catch (err) { showMsg('error', err instanceof Error ? err.message : '保存失败') }
-    finally { setPromptSaving(false) }
-  }
-  const handleDeletePrompt = async (id: string) => {
-    if (!confirm('确认删除此提示词模板？')) return
-    const res = await fetch(`/api/admin/prompts/${id}`, { method: 'DELETE' })
-    if (res.ok) { setPrompts((prev) => prev.filter((p) => p.id !== id)); showMsg('success', '已删除') }
-    else showMsg('error', '删除失败')
-  }
-
   const imageGenKeys = keys.filter((k) => k.supportsImageGen)
   const zhVoices = allVoices.filter((v) => v.lang.startsWith('zh'))
   const enVoices = allVoices.filter((v) => v.lang.startsWith('en'))
+
+  if (!open) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -190,7 +250,7 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto px-6 py-6">
 
           {/* Tabs */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center mb-6">
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
               {([['llm', '大模型配置'], ['tts', '朗读设置']] as const).map(([t, label]) => (
                 <button key={t} onClick={() => setAdminTab(t)}
@@ -199,19 +259,14 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                 </button>
               ))}
             </div>
-            <button onClick={handleSaveLlm} disabled={llmSaving || !dirty}
-              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2 px-6 rounded-xl transition-colors text-sm">
-              {llmSaving ? '保存中...' : '保存配置'}
-            </button>
           </div>
 
           {adminTab === 'llm' && (
           <div className="space-y-6">
-            {/* LLM Settings */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
-                <select value={llm.storyLLMId} onChange={(e) => { setLlm({ ...llm, storyLLMId: e.target.value }); setDirty(true) }}
+                <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                   <option value="">-- 选择 API Key --</option>
                   {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
@@ -220,10 +275,10 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">绘本图片模型</label>
-                <select value={llm.pictureLLMId} onChange={(e) => { setLlm({ ...llm, pictureLLMId: e.target.value }); setDirty(true) }}
+                <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                   <option value="">-- 选择 API Key --</option>
-                  {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
+                  {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
                 </select>
                 <p className="text-xs text-gray-400 mt-1.5">用于生成绘本插画（如 qwen-image-edit-plus）</p>
               </div>
@@ -283,7 +338,7 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                 ) : (
                   <div className="flex gap-2">
                     <select value={selectedZhVoice}
-                      onChange={(e) => { setSelectedZhVoice(e.target.value); localStorage.setItem('wstory_zh_voice', e.target.value); setDirty(true) }}
+                      onChange={(e) => { setSelectedZhVoice(e.target.value); localStorage.setItem('wstory_zh_voice', e.target.value) }}
                       className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                       <option value="">-- 使用默认 --</option>
                       {zhVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
@@ -309,7 +364,7 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                 ) : (
                   <div className="flex gap-2">
                     <select value={selectedEnVoice}
-                      onChange={(e) => { setSelectedEnVoice(e.target.value); localStorage.setItem('wstory_en_voice', e.target.value); setDirty(true) }}
+                      onChange={(e) => { setSelectedEnVoice(e.target.value); localStorage.setItem('wstory_en_voice', e.target.value) }}
                       className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                       <option value="">-- 使用默认 --</option>
                       {enVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
@@ -335,6 +390,16 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
 
 
         </div>{/* end scroll area */}
+
+        <footer className="flex-shrink-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
+          <button type="button" onClick={onClose} className="border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2.5 px-5 rounded-xl transition-colors text-sm">
+            取消
+          </button>
+          <button type="button" onClick={handlePersistConfig} disabled={llmSaving || !dirty}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-6 rounded-xl transition-colors text-sm">
+            {llmSaving ? '保存中...' : '保存设置'}
+          </button>
+        </footer>
 
         {/* API Key Modal */}
         {keyModalOpen && (
@@ -377,7 +442,7 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                     API 密钥
-                    {editingKey && <span className="ml-1 font-normal text-gray-400">（留空则保留原值）</span>}
+                    {editingKey && !isDraftKeyId(editingKey.id) && <span className="ml-1 font-normal text-gray-400">（留空则保留原值）</span>}
                   </label>
                   <input type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="sk-..."
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
@@ -389,8 +454,8 @@ export default function AdminPage({ onClose }: { onClose: () => void }) {
                 </label>
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={closeKeyModal} className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl text-sm hover:bg-gray-50 transition-colors">取消</button>
-                  <button type="submit" disabled={keySaving} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                    {keySaving ? '保存中...' : '保存'}
+                  <button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
+                    确定
                   </button>
                 </div>
               </form>

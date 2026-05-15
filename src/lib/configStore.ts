@@ -1,10 +1,14 @@
 import { v4 as uuidv4 } from 'uuid'
 import { readJson, writeJson } from './storage'
 import { encrypt, decrypt, maskKey } from './crypto'
-import type { AppConfig, APIKey, APIKeyInput, APIKeyView, LLMSettings } from '@/types'
+import type { AppConfig, APIKey, APIKeyInput, APIKeyView, LLMSettings, AdminPersistApiKeyInput } from '@/types'
 
 const FILENAME = 'config.json'
 
+/**
+ * 管理端：API Key / LLM 的完整变更应通过 applyFullAdminPersist（POST /api/admin/config/persist）一次写入内存并落盘。
+ * createAPIKey / updateAPIKey / deleteAPIKey 仍可供内部或其它入口复用。
+ */
 const DEFAULT_CONFIG: AppConfig = {
   apiKeys: [],
   llmSettings: {
@@ -17,8 +21,9 @@ function getConfig(): AppConfig {
   return readJson<AppConfig>(FILENAME, DEFAULT_CONFIG)
 }
 
-function saveConfig(config: AppConfig): void {
-  writeJson(FILENAME, config)
+/** 将当前内存中的完整配置写入 config.json */
+export function persistAppConfigToFile(): void {
+  writeJson(FILENAME, getConfig())
 }
 
 // ── API Keys ──
@@ -75,7 +80,6 @@ export function createAPIKey(input: APIKeyInput): APIKeyView {
       config.llmSettings.pictureLLMId = newKey.id
     }
   }
-  saveConfig(config)
   return toView(newKey)
 }
 
@@ -102,7 +106,6 @@ export function updateAPIKey(id: string, input: Partial<APIKeyInput>): APIKeyVie
     updatedAt: new Date().toISOString(),
   }
   config.apiKeys[idx] = updated
-  saveConfig(config)
   return toView(updated)
 }
 
@@ -113,7 +116,6 @@ export function deleteAPIKey(id: string): boolean {
   config.apiKeys = filtered
   if (config.llmSettings.storyLLMId === id) config.llmSettings.storyLLMId = ''
   if (config.llmSettings.pictureLLMId === id) config.llmSettings.pictureLLMId = ''
-  saveConfig(config)
   return true
 }
 
@@ -126,8 +128,90 @@ export function getLLMSettings(): LLMSettings {
 export function updateLLMSettings(settings: Partial<LLMSettings>): LLMSettings {
   const config = getConfig()
   config.llmSettings = { ...config.llmSettings, ...settings }
-  saveConfig(config)
   return config.llmSettings
+}
+
+const NEW_ROW_PREFIX = 'new_'
+
+/**
+ * 管理端「保存配置」：用请求体中的 apiKeys + llmSettings 整体替换内存中的对应字段并写入 config.json。
+ * rowId 为已有 key 的 id，或以 `new_` 开头的草稿 id（保存时分配服务端 uuid）；llmSettings 中的 id 可与草稿 rowId 一致。
+ */
+export function applyFullAdminPersist(payload: { apiKeys: AdminPersistApiKeyInput[]; llmSettings: LLMSettings }): void {
+  const config = getConfig()
+  const oldById = new Map(config.apiKeys.map((k) => [k.id, k]))
+  const rowIdToServerId = new Map<string, string>()
+
+  for (const row of payload.apiKeys) {
+    if (oldById.has(row.rowId)) {
+      rowIdToServerId.set(row.rowId, row.rowId)
+    } else if (row.rowId.startsWith(NEW_ROW_PREFIX)) {
+      rowIdToServerId.set(row.rowId, uuidv4())
+    } else {
+      throw new Error('INVALID_ROW_ID')
+    }
+  }
+
+  const now = new Date().toISOString()
+  const newKeys: APIKey[] = []
+  for (const row of payload.apiKeys) {
+    const serverId = rowIdToServerId.get(row.rowId)!
+    if (oldById.has(row.rowId)) {
+      const old = oldById.get(row.rowId)!
+      const trimmedSecret = row.apiKey?.trim()
+      newKeys.push({
+        ...old,
+        id: serverId,
+        name: row.name.trim(),
+        provider: row.provider.trim(),
+        model: row.model.trim(),
+        baseURL: row.baseURL !== undefined ? row.baseURL.trim() || undefined : old.baseURL,
+        supportsImageGen: Boolean(row.supportsImageGen),
+        keyEncrypted: trimmedSecret ? encrypt(trimmedSecret) : old.keyEncrypted,
+        updatedAt: now,
+      })
+    } else {
+      const trimmedSecret = row.apiKey?.trim() ?? ''
+      newKeys.push({
+        id: serverId,
+        name: row.name.trim(),
+        provider: row.provider.trim(),
+        model: row.model.trim(),
+        baseURL: row.baseURL?.trim() || undefined,
+        keyEncrypted: encrypt(trimmedSecret),
+        supportsImageGen: Boolean(row.supportsImageGen),
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+  }
+
+  config.apiKeys = newKeys
+
+  const mapLlmId = (id: string): string => {
+    if (!id) return ''
+    if (rowIdToServerId.has(id)) return rowIdToServerId.get(id)!
+    return newKeys.some((k) => k.id === id) ? id : ''
+  }
+
+  let storyLLMId = mapLlmId(payload.llmSettings.storyLLMId)
+  let pictureLLMId = mapLlmId(payload.llmSettings.pictureLLMId)
+
+  if (newKeys.length === 1) {
+    const only = newKeys[0]
+    if (!storyLLMId) storyLLMId = only.id
+    if (!pictureLLMId && only.supportsImageGen) pictureLLMId = only.id
+  }
+
+  if (storyLLMId && !newKeys.some((k) => k.id === storyLLMId)) storyLLMId = ''
+  if (pictureLLMId) {
+    const pk = newKeys.find((k) => k.id === pictureLLMId)
+    if (!pk) pictureLLMId = ''
+    else if (!pk.supportsImageGen) throw new Error('PICTURE_LLM_NOT_IMAGE_CAPABLE')
+  }
+
+  config.llmSettings = { storyLLMId, pictureLLMId }
+  persistAppConfigToFile()
 }
 
 // ── Resolve active LLM key for generation ──

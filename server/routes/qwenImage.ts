@@ -9,8 +9,8 @@ const DASHSCOPE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/
 
 const NEGATIVE_PROMPT = '低分辨率，低画质，肢体畸形，手指畸形，多余肢体，缺少肢体，穿模，模型穿插，身体扭曲，比例失调，脸部变形，五官错乱，眼睛不对称，多只眼睛，多张嘴，额外的头，关节异常，骨骼扭曲，身体部位重叠，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感，构图混乱，文字模糊，扭曲，恐怖，怪异。'
 
-// Minimum gap between consecutive Qwen image API calls (ms)
-const REQUEST_INTERVAL_MS = 5000
+// 每次生成插图或参考图（定妆）之间，两次调用通义生图 API 至少间隔约 10 秒
+const REQUEST_INTERVAL_MS = 10_000
 // After each 429, wait before next attempt: 10s → 20s → 40s (at most 3 retries)
 const RATE_LIMIT_RETRY_BACKOFF_MS = [10_000, 20_000, 40_000] as const
 const MAX_429_RETRIES = RATE_LIMIT_RETRY_BACKOFF_MS.length

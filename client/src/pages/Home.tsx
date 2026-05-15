@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { BookItem, DropdownOptions, Guide, Story, PictureBook, APIKeyView, LLMSettings } from '@/types'
+import type { BookItem, DropdownOptions, Guide, Story, APIKeyView, LLMSettings } from '@/types'
 import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
 import AdminPage from './Admin'
 
@@ -162,9 +162,13 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
 
   const pages: ReaderPage[] = [
     { type: 'cover' },
-    ...(book.pictureBook
-      ? [...book.pictureBook.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn, imagePrompt: p.imagePrompt }))
-      : [...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({ type: 'story' as const, pageNumber: p.pageNumber, text: p.text, textEn: p.textEn }))),
+    ...[...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({
+      type: 'story' as const,
+      pageNumber: p.pageNumber,
+      text: p.text,
+      textEn: p.textEn,
+      imagePrompt: p.imagePrompt,
+    })),
   ]
   const total = pages.length
 
@@ -530,19 +534,23 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       const translated = await transRes.json()
       story = translated.story
       guide = translated.guide
-      let pictureBook: PictureBook | undefined = translated.pictureBook
-      console.log(`[generate] ③ 完成: ${pictureBook?.pages?.length} 页 imagePrompts, coverPrompt=${!!pictureBook?.coverPrompt}`)
+      console.log(
+        `[generate] ③ 完成: ${story.pages?.length} 页 imagePrompts, cover imagePrompt=${!!story.cover?.imagePrompt}`,
+      )
 
       // ⑥ 正在保存...
       setGenStep('正在保存...')
       console.log('[generate] ⑥ 正在保存...')
-      const saveBody = { ...input, guide, story, characters, illustrationStyleId: styleId, ...(pictureBook ? { pictureBook } : {}) }
+      const saveBody = { ...input, guide, story, characters, illustrationStyleId: styleId }
       const saveRes = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saveBody) })
       if (!saveRes.ok) throw new Error((await saveRes.json()).error)
       const book: BookItem = await saveRes.json()
       console.log(`[generate] ⑥ 保存完成: bookId=${book.id}`)
 
-      if (hasPictureLLM && book.pictureBook) {
+      const hasIllustrationPrompts =
+        !!(book.story.cover?.imagePrompt?.trim()) || book.story.pages.some((p) => p.imagePrompt?.trim())
+
+      if (hasPictureLLM && hasIllustrationPrompts) {
         // ④ 正在绘制角色定妆图...
         setGenStep('正在绘制角色定妆图...')
         console.log('[generate] ④ 正在绘制角色定妆图...')
@@ -554,9 +562,10 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
         console.log('[generate] ④ 角色定妆图完成')
 
         // ⑤ 正在生成绘本插图（第 X/N 页）...  — page by page for live progress
-        const sortedPages = [...book.pictureBook.pages].sort((a, b) => a.pageNumber - b.pageNumber)
-        const hasCover = !!book.pictureBook.coverPrompt
-        const totalPages = sortedPages.length
+        const sortedPages = [...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
+        const pagesToDraw = sortedPages.filter((p) => p.imagePrompt?.trim())
+        const hasCover = !!book.story.cover?.imagePrompt
+        const totalPages = pagesToDraw.length
         let donePages = 0
 
         if (hasCover) {
@@ -569,7 +578,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
           }).catch(console.error)
         }
 
-        for (const page of sortedPages) {
+        for (const page of pagesToDraw) {
           donePages++
           setGenStep(`正在生成绘本插图（第 ${donePages}/${totalPages} 页）...`)
           console.log(`[generate] ⑤ 生成第 ${page.pageNumber} 页插图 (${donePages}/${totalPages})`)

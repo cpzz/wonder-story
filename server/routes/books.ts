@@ -18,7 +18,6 @@ router.post('/', (req, res) => {
       protagonistPreset,
       guide,
       story,
-      pictureBook,
       mode,
       theme,
       characters,
@@ -28,7 +27,7 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: '缺少必填字段' })
     }
     const book: BookItem = saveBook({
-      title: story.title,
+      title: { text: story.cover.text, textEn: story.cover.textEn },
       emotion: emotion ?? '',
       scene: scene ?? '',
       ageGroup,
@@ -36,13 +35,14 @@ router.post('/', (req, res) => {
       protagonistPreset,
       guide,
       story,
-      pictureBook,
       mode,
       theme,
       characters,
       illustrationStyleId,
     })
-    console.log(`[books] saved book id=${book.id}, pages=${story.pages?.length}, chars=${characters?.length}, hasPictureBook=${!!pictureBook}, style=${illustrationStyleId ?? 'none'}`)
+    console.log(
+      `[books] saved book id=${book.id}, pages=${story.pages?.length}, chars=${characters?.length}, coverImagePrompt=${!!story.cover?.imagePrompt}, style=${illustrationStyleId ?? 'none'}`,
+    )
     res.status(201).json(book)
   } catch (err) {
     console.error('[POST /api/books]', err)

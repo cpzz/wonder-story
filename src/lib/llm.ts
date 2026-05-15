@@ -23,14 +23,84 @@ function createClientFromKey(apiKey: APIKey): OpenAI {
   })
 }
 
+/**
+ * 从首个 `{` 或 `[` 起按括号与字符串规则截取**一层**完整 JSON，避免 `/\{[\s\S]*\}/` 贪婪匹配到文末垃圾或另一段 `}`。
+ */
+function extractBalancedJson(text: string): string | null {
+  const start = text.search(/[\[{]/)
+  if (start < 0) return null
+  const stack: ('{' | '[')[] = []
+  let inString = false
+  let escape = false
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (inString) {
+      if (escape) {
+        escape = false
+        continue
+      }
+      if (c === '\\') {
+        escape = true
+        continue
+      }
+      if (c === '"') {
+        inString = false
+        continue
+      }
+      continue
+    }
+    if (c === '"') {
+      inString = true
+      continue
+    }
+    if (c === '{') {
+      stack.push('{')
+      continue
+    }
+    if (c === '[') {
+      stack.push('[')
+      continue
+    }
+    if (c === '}') {
+      if (stack.length === 0 || stack[stack.length - 1] !== '{') return null
+      stack.pop()
+      if (stack.length === 0) return text.slice(start, i + 1)
+      continue
+    }
+    if (c === ']') {
+      if (stack.length === 0 || stack[stack.length - 1] !== '[') return null
+      stack.pop()
+      if (stack.length === 0) return text.slice(start, i + 1)
+      continue
+    }
+  }
+  return null
+}
+
 function cleanJSON(content: string): string {
-  // Strip markdown code fences
-  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fenced) return jsonrepair(fenced[1].trim())
-  // Extract first {...} or [...] block
-  const obj = content.match(/(\{[\s\S]*\}|\[[\s\S]*\])/)
-  if (obj) return jsonrepair(obj[1].trim())
-  return jsonrepair(content.trim())
+  const trimmed = content.trim()
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const inner = fenced ? fenced[1].trim() : trimmed
+  const balanced = extractBalancedJson(inner) ?? inner
+
+  const attempts = [balanced, inner, trimmed]
+  let lastErr: unknown
+  for (const candidate of attempts) {
+    if (!candidate) continue
+    try {
+      return jsonrepair(candidate)
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  const posNum =
+    lastErr && typeof lastErr === 'object' && 'position' in lastErr
+      ? (lastErr as { position: number }).position
+      : -1
+  const sample =
+    posNum >= 0 ? balanced.slice(Math.max(0, posNum - 120), posNum + 120) : balanced.slice(0, 400)
+  console.error('[cleanJSON] jsonrepair failed after balanced extract', { position: posNum, sample })
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }
 
 export async function generateJSON<T>(

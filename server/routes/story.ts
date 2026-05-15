@@ -16,7 +16,7 @@ interface StoryRaw {
 function wrapStory(raw: StoryRaw): { characters: CharacterCard[]; story: Story } {
   return {
     characters: raw.characters ?? [],
-    story: { title: { text: raw.title }, pages: raw.pages },
+    story: { cover: { text: raw.title }, pages: raw.pages },
   }
 }
 

@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import type { BookItem } from '@/types'
+import type { BookItem, Story, StoryCover, StoryPage } from '@/types'
 
 const USR_DIR = path.join(process.cwd(), 'user', 'books')
 
@@ -15,6 +15,50 @@ function bookDir(id: string): string {
 
 function bookFile(id: string): string {
   return path.join(bookDir(id), 'index.json')
+}
+
+/** 旧版 `story.title` + 可选 `pictureBook` → `story.cover` + 页级 `imagePrompt` */
+export function normalizeBookItem(book: BookItem): BookItem {
+  type LegacyPb = {
+    title?: { text: string; textEn?: string }
+    coverPrompt?: string
+    pages: { pageNumber: number; text?: string; textEn?: string; imagePrompt?: string }[]
+  }
+  const raw = book as BookItem & { pictureBook?: LegacyPb }
+  const pb = raw.pictureBook
+  const s = book.story as Story & { title?: { text: string; textEn?: string } }
+
+  let cover: StoryCover
+  if (s.cover && typeof s.cover.text === 'string') {
+    cover = {
+      text: s.cover.text,
+      textEn: s.cover.textEn,
+      imagePrompt: s.cover.imagePrompt ?? pb?.coverPrompt,
+    }
+  } else {
+    const t = s.title ?? book.title
+    cover = {
+      text: t?.text ?? '',
+      textEn: t?.textEn,
+      imagePrompt: pb?.coverPrompt,
+    }
+  }
+
+  const pages: StoryPage[] = (s.pages ?? []).map((p) => {
+    const fromPb = pb?.pages?.find((pp) => pp.pageNumber === p.pageNumber)
+    return {
+      ...p,
+      textEn: p.textEn ?? fromPb?.textEn,
+      imagePrompt: p.imagePrompt ?? fromPb?.imagePrompt,
+    }
+  })
+
+  const { pictureBook: _drop, ...rest } = raw as BookItem & { pictureBook?: LegacyPb }
+  return {
+    ...rest,
+    title: { text: cover.text, textEn: cover.textEn },
+    story: { cover, pages },
+  }
 }
 
 export function imagesDir(id: string): string {
@@ -80,7 +124,7 @@ export function getBooks(): BookItem[] {
     const file = bookFile(entry.name)
     if (!fs.existsSync(file)) continue
     try {
-      books.push(JSON.parse(fs.readFileSync(file, 'utf-8')) as BookItem)
+      books.push(normalizeBookItem(JSON.parse(fs.readFileSync(file, 'utf-8')) as BookItem))
     } catch {}
   }
   return books.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -90,7 +134,7 @@ export function getBookById(id: string): BookItem | undefined {
   const file = bookFile(id)
   if (!fs.existsSync(file)) return undefined
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8')) as BookItem
+    return normalizeBookItem(JSON.parse(fs.readFileSync(file, 'utf-8')) as BookItem)
   } catch {
     return undefined
   }

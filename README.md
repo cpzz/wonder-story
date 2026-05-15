@@ -2,20 +2,19 @@
 
 用一个故事，陪孩子走过每一种情绪。
 
-一款基于大语言模型的儿童绘本生成应用，支持**情绪故事**和**睡前故事**两种模式，帮助家长用温暖的故事陪伴孩子处理情绪、进入梦乡。
+基于大语言模型的儿童绘本应用，支持**情绪故事**与**睡前故事**，附家长引导与可选插图生成。
 
 ---
 
 ## 功能特性
 
-- **情绪故事**：根据孩子的情绪、场景、年龄生成专属绘本故事，并附家长引导建议
-- **睡前故事**：根据主题和年龄生成舒缓的睡前故事，帮助孩子放松入睡
-- **内置阅读器**：翻页式阅读，含封面、家长引导页和故事正文
-- **自动朗读**：Web Speech API TTS，支持语音开关与语音选择
-- **绘本图片**：可选接入图像生成模型，为每页生成插画
-- **多模型支持**：兼容 OpenAI、DeepSeek、阿里云、百度、智谱、月之暗面、字节跳动、移动云等主流 LLM 提供商
-- **提示词配置**：可在设置页自定义各模式的故事和引导提示词模板
-- **本地文件存储**：每本绘本独立存储于 `usr/<UUID>/index.json`，无需数据库
+- **情绪故事**：按情绪、场景、年龄生成故事，并附家长引导建议  
+- **睡前故事**：按主题与年龄生成舒缓睡前故事  
+- **阅读器**：翻页阅读（封面、故事页），Web Speech 朗读与音色选择  
+- **可选插图**：创作流程中若已配置支持文生图的 API Key，会在保存绘本后依次生成定妆参考图与内页/封面图（仅创建时尝试，无单独「补生成」入口）  
+- **多模型**：OpenAI 兼容接口，可在管理里配置多家提供商的 Key  
+
+故事与引导使用的提示词为代码内置（`src/lib/defaultPrompts.ts`），不提供 Web 端修改。
 
 ---
 
@@ -24,129 +23,95 @@
 | 层 | 技术 |
 |---|---|
 | 前端 | React 18 + Vite 5 + TypeScript + Tailwind CSS v3 |
-| 后端 | Express 4 + tsx (TypeScript) |
-| LLM | OpenAI SDK v4（自定义 baseURL 支持任意兼容提供商） |
-| 存储 | 本地 JSON 文件（`data/`、`usr/`） |
-| 安全 | AES-256-GCM 加密存储 API Key |
+| 后端 | Express 4 + tsx |
+| LLM | OpenAI SDK v4（自定义 `baseURL`） |
+| 存储 | 本地 JSON：`user/settings/`（配置、选项）、`user/books/<id>/`（绘本与图片） |
+| 安全 | API Key 使用 AES-256-GCM，密钥在 `user/settings/.key` |
 
 ---
 
 ## 快速开始
 
-### 环境要求
-
-- Node.js 18+
-- npm 9+
-
-### 安装
+**环境**：Node.js 18+、npm 9+
 
 ```bash
 git clone https://github.com/cpzz/wonder-story.git
 cd wonder-story
 npm install
-```
-
-### 启动开发服务器
-
-```bash
 npm run dev
 ```
 
-- 前端：http://localhost:3001
-
-### 生产构建
+- 前端：<http://localhost:3001>（Vite 将 `/api` 代理到后端）  
+- 后端 API：<http://localhost:3002>（或由环境变量 `PORT` 指定）
 
 ```bash
-npm run build       # 构建前端
-npm start           # 启动后端（需先构建）
+npm run build   # 构建前端 → dist/client
+npm start       # 仅启动 API（默认 :3002）；生产环境需自行托管 dist/client 中的静态文件并反代 /api 到本服务
 ```
 
 ---
 
 ## 配置说明
 
-点击主界面右上角齿轮图标，打开**系统设置**窗口：
+主界面右上角齿轮打开**系统设置**：
 
-### 大模型配置
-
-选择用于**故事生成**和**绘图**的 API Key。
-
-### API 密钥管理
-
-添加、编辑、删除大模型 API Key。支持以下提供商：
-
-| 提供商 | 推荐模型 |
-|---|---|
-| OpenAI | gpt-4o |
-| DeepSeek（深度求索） | deepseek-chat |
-| 阿里云（通义千问） | qwen-max |
-| 百度（文心一言） | ernie-4.0-8k |
-| 智谱 AI（GLM） | glm-4-flash |
-| 月之暗面（Moonshot） | moonshot-v1-8k |
-| 字节跳动（豆包） | doubao-pro-4k |
-| 移动云（cmecloud） | 自定义 |
-| 自定义 | 任意 OpenAI 兼容接口 |
-
-> 勾选"支持图像生成"的 Key 才会出现在绘图模型选项中。
+- **API Key**：添加、编辑密钥；勾选「支持图像生成」的 Key 可作为绘本绘图模型  
+- **故事 / 绘本 LLM**：选择对应 Key  
+- 点击**保存设置**会通过 `POST /api/admin/config/persist` 一次性写入 `user/settings/config.json`  
 
 ---
 
-## 项目结构
+## 项目结构（节选）
 
 ```
 wonder-story/
-├── client/src/
-│   ├── pages/
-│   │   ├── Home.tsx        # 主页面（书单 + 阅读器 + 创作）
-│   │   └── Admin.tsx       # 系统设置弹窗
-│   └── types/              # TypeScript 类型定义
+├── client/src/pages/       # Home.tsx、Admin.tsx
 ├── server/
-│   ├── index.ts            # Express 服务入口
-│   └── routes/             # API 路由
-│       ├── books.ts
-│       ├── story.ts
-│       ├── trouble.ts
-│       ├── pictureBook.ts
-│       ├── options.ts
-│       ├── llmStatus.ts
-│       └── admin/
-│           ├── apiKeys.ts
-│           ├── llmSettings.ts
-│           └── prompts.ts
-├── src/lib/
-│   ├── llm.ts              # LLM 调用封装
-│   ├── booksStore.ts       # 绘本存储
-│   ├── configStore.ts      # API Key & LLM 设置
-│   ├── promptStore.ts      # 提示词模板
-│   └── defaultPrompts.ts   # 内置默认提示词
-├── data/                   # 配置文件（不提交）
-└── usr/                    # 用户绘本数据（不提交）
+│   ├── index.ts
+│   └── routes/             # books、story、trouble、translate、qwenImage、options、llm-status、admin/*
+├── src/
+│   ├── types/index.ts
+│   └── lib/                # llm、booksStore、configStore、promptStore、defaultPrompts、optionsStore…
+└── user/                   # 本地数据（.gitignore，含 settings 与 books）
 ```
 
 ---
 
-## API 接口
+## HTTP API（摘要）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/books` | 获取所有绘本 |
-| POST | `/api/books` | 保存绘本 |
+| GET | `/api/books` | 绘本列表 |
+| GET | `/api/books/:id` | 单本详情 |
+| POST | `/api/books` | 新建绘本 |
 | DELETE | `/api/books/:id` | 删除绘本 |
-| POST | `/api/story` | 生成故事 |
+| GET | `/api/books/:id/images/:pageNumber` | 某页插图文件 |
+| GET | `/api/books/:id/refs/:index` | 角色定妆参考图 |
+| POST | `/api/story` | 生成角色 + 中文故事 |
 | POST | `/api/trouble` | 生成家长引导 |
-| POST | `/api/picture-book` | 生成绘本图片描述 |
-| GET | `/api/llm-status` | 查询 LLM 配置状态 |
-| GET/POST/PUT/DELETE | `/api/admin/api-keys` | API Key 管理 |
-| GET/PUT | `/api/admin/llm-settings` | 大模型配置 |
-| GET/POST/PUT/DELETE | `/api/admin/prompts` | 提示词模板管理 |
+| POST | `/api/translate` | 翻译并在 `story.cover` / `story.pages[].imagePrompt` 中写入插图描述 |
+| GET | `/api/options` | 下拉选项 |
+| PUT | `/api/options` | 更新下拉选项 |
+| GET | `/api/llm-status` | 是否已配置故事/绘图 Key |
+| POST | `/api/qwen-image/gen-refs` | 生成角色定妆图（内部/创作流程） |
+| POST | `/api/qwen-image/generate` | 按页生成插图（内部/创作流程） |
+| POST | `/api/qwen-image/test` | 连通性测试 |
+| GET | `/api/admin/api-keys` | Key 列表（脱敏） |
+| GET | `/api/admin/llm-settings` | 当前 LLM 选择 |
+| POST | `/api/admin/config/persist` | **唯一写入口**：保存 Key 与 LLM 设置 |
+
+对 `/api/admin/api-keys` 的 POST/PUT/DELETE 与对 `/api/admin/llm-settings` 的 PUT 会返回 405，提示改用 `config/persist`。
 
 ---
 
-## 数据安全
+## 数据与安全
 
-- API Key 使用 AES-256-GCM 加密后写入 `data/config.json`
-- 加密主密钥存储于 `data/.key`
-- `data/` 和 `usr/` 已加入 `.gitignore`，不会提交到代码仓库
+- `user/settings/config.json`：API Key（密文）、LLM 选中项  
+- `user/settings/.key`：本地加密主密钥（勿泄露、勿与密文分离后乱删）  
+- `user/settings/options.json`：创作表单下拉项（首次运行自动生成）  
+- `user/books/<uuid>/`：每本绘本的 `index.json`、插图与定妆图  
+
+`user/` 已加入 `.gitignore`。
 
 ---
 

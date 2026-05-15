@@ -95,10 +95,19 @@ export interface StoryPage {
   pageNumber: number
   text: string
   textEn?: string
+  /** 该页插图英文描述（文生图用） */
+  imagePrompt?: string
+}
+
+/** 封面：书名 + 可选英文 + 封面插图描述 */
+export interface StoryCover {
+  text: string
+  textEn?: string
+  imagePrompt?: string
 }
 
 export interface Story {
-  title: { text: string; textEn?: string }
+  cover: StoryCover
   pages: StoryPage[]
 }
 
@@ -116,21 +125,7 @@ export interface CharacterCard {
   personality: string  // 性格 / 习惯动作
   forbidden: string    // 禁用元素
   refPrompt: string    // 生成定妆图的英文 prompt
-  refImageUrl?: string // 定妆图 URL（图像模型生成后填入）
-}
-
-export interface PictureBookPage {
-  pageNumber: number
-  text: string
-  textEn?: string
-  imagePrompt: string
-  imageUrl?: string    // 实际插图 URL（图像模型生成后填入）
-}
-
-export interface PictureBook {
-  title: { text: string; textEn?: string }
-  coverPrompt?: string   // 封面插画描述（图像模型生成封面用）
-  pages: PictureBookPage[]
+  refImageUrl?: string // 定妆图 CDN（仅 gen-refs 调用通义成功后写入的 url；非站内路径）
 }
 
 export interface Guide {
@@ -156,7 +151,6 @@ export interface BookItem {
   characters?: CharacterCard[]
   guide: Guide
   story: Story
-  pictureBook?: PictureBook
   createdAt: string
 }
 

@@ -9,7 +9,6 @@ import qwenImageRouter from './routes/qwenImage'
 import adminApiKeysRouter from './routes/admin/apiKeys'
 import adminLlmSettingsRouter from './routes/admin/llmSettings'
 import adminConfigPersistRouter from './routes/admin/configPersist'
-import adminPromptsRouter from './routes/admin/prompts'
 import llmStatusRouter from './routes/llmStatus'
 
 const app = express()
@@ -26,7 +25,6 @@ app.use('/api/llm-status', llmStatusRouter)
 app.use('/api/admin/api-keys', adminApiKeysRouter)
 app.use('/api/admin/llm-settings', adminLlmSettingsRouter)
 app.use('/api/admin/config', adminConfigPersistRouter)
-app.use('/api/admin/prompts', adminPromptsRouter)
 
 const PORT = Number(process.env.PORT) || 3002
 app.listen(PORT, () => {

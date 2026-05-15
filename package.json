@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
+    "dev": "concurrently -n \"http-api:3002,vite-web\" -c cyan,magenta \"tsx watch server/index.ts\" \"wait-on tcp:127.0.0.1:3002 && vite\"",
     "server": "tsx watch server/index.ts",
     "client": "vite",
     "build": "vite build",
@@ -35,6 +35,7 @@
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
     "typescript": "^5",
-    "vite": "^5.4.21"
+    "vite": "^5.4.21",
+    "wait-on": "^9.0.10"
   }
 }

@@ -492,14 +492,12 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 }) {
   const [emotion, setEmotion] = useState('')
   const [scene, setScene] = useState('')
-  const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('wstory_age_group') ?? '6')
+  const [ageGroup, setAgeGroup] = useState('6')
   const [description, setDescription] = useState('')
-  const [protagonistPreset, setProtagonistPreset] = useState(
-    () => localStorage.getItem('wstory_protagonist_preset') ?? '自动',
-  )
+  const [protagonistPreset, setProtagonistPreset] = useState('自动')
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
-  const [styleId, setStyleId] = useState(() => localStorage.getItem('wstory_style_id') ?? DEFAULT_STYLE_ID)
+  const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID)
   const textLang: 'zh' | 'en' | 'bilingual' = 'bilingual'
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
@@ -621,7 +619,6 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       }
 
       onCreated(book); onClose()
-      setEmotion(''); setScene(''); setAgeGroup(''); setDescription(''); setTheme('')
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败，请重试')
     } finally { setGenerating(false); setGenStep('') }
@@ -781,6 +778,7 @@ export default function HomePage() {
   const [books, setBooks] = useState<BookItem[]>([])
   const [selectedBook, setSelectedBook] = useState<BookItem | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [createModalKey, setCreateModalKey] = useState(0)
   const [adminOpen, setAdminOpen] = useState(false)
   const [displayLang, setDisplayLang] = useState<'zh' | 'en'>('zh')
   const [options, setOptions] = useState<DropdownOptions>(DEFAULT_OPTIONS)
@@ -805,6 +803,11 @@ export default function HomePage() {
   }, [])
 
   const handleCreated = (book: BookItem) => { setBooks((prev) => [book, ...prev]); setSelectedBook(book) }
+
+  const openCreateModal = () => {
+    setCreateModalKey((k) => k + 1)
+    setCreateOpen(true)
+  }
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -832,7 +835,7 @@ export default function HomePage() {
               </svg>
             </button>
           </div>
-          <button onClick={() => setCreateOpen(true)}
+          <button onClick={openCreateModal}
             className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2.5 rounded-xl transition-colors text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -904,7 +907,7 @@ export default function HomePage() {
               <div className="text-6xl mb-4">📖</div>
               <h2 className="text-xl font-bold text-gray-700 mb-2">童心事·绘本</h2>
               <p className="text-gray-400 text-sm mb-6">用一个故事，陪孩子走过每一种情绪</p>
-              <button onClick={() => setCreateOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-3 rounded-xl transition-colors text-sm">
+              <button onClick={openCreateModal} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-3 rounded-xl transition-colors text-sm">
                 创作第一本绘本
               </button>
             </div>
@@ -913,7 +916,16 @@ export default function HomePage() {
           <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} hasPictureLLM={llmStatus.hasPictureLLM} />
         )}
       </main>
-      <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} options={options} onOptionsChange={setOptions} onCreated={handleCreated} />
+      {createOpen && (
+        <CreateModal
+          key={createModalKey}
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          options={options}
+          onOptionsChange={setOptions}
+          onCreated={handleCreated}
+        />
+      )}
       <AdminPage open={adminOpen} onClose={() => setAdminOpen(false)} />
     </div>
   )

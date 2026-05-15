@@ -44,22 +44,40 @@ const PROVIDER_PRESETS = [
   { label: '移动云（cmecloud）', provider: 'cmecloud', model: '', baseURL: 'https://zhenze-huhehaote.cmecloud.cn/v1' },
 ]
 
-export default function AdminPage({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function AdminPage({
+  open,
+  onClose,
+  initialKeys,
+  initialLlm,
+}: {
+  open: boolean
+  onClose: () => void
+  initialKeys: APIKeyView[]
+  initialLlm: LLMSettings
+}) {
   const [message, setMessage] = useState<Message | null>(null)
   const [adminTab, setAdminTab] = useState<'llm' | 'tts'>('llm')
 
   // ── API Keys ──
-  const [keys, setKeys] = useState<LocalKeyRow[]>([])
+  const [keys, setKeys] = useState<LocalKeyRow[]>(() => initialKeys.map((k) => ({ ...k })))
   const [keyModalOpen, setKeyModalOpen] = useState(false)
   const [editingKey, setEditingKey] = useState<LocalKeyRow | null>(null)
   const [form, setForm] = useState<APIKeyFormData>(EMPTY_FORM)
 
   // ── LLM Settings ──
-  const [llm, setLlm] = useState<LLMSettings>({ storyLLMId: '', pictureLLMId: '' })
+  const [llm, setLlm] = useState<LLMSettings>(() => ({
+    storyLLMId: initialLlm.storyLLMId,
+    pictureLLMId: initialLlm.pictureLLMId ?? '',
+  }))
   const [llmSaving, setLlmSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const baselineRef = useRef<{ llm: LLMSettings; keysSig: string } | null>(null)
-  const [baselineReady, setBaselineReady] = useState(false)
+  const baselineRef = useRef<{ llm: LLMSettings; keysSig: string }>({
+    llm: {
+      storyLLMId: initialLlm.storyLLMId,
+      pictureLLMId: initialLlm.pictureLLMId ?? '',
+    },
+    keysSig: keysSnapshot(initialKeys.map((k) => ({ ...k }))),
+  })
 
   // ── TTS Voices ──
   const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([])
@@ -71,48 +89,13 @@ export default function AdminPage({ open, onClose }: { open: boolean; onClose: (
     setTimeout(() => setMessage(null), 3000)
   }
 
-  /** 每次打开设置窗口时从服务端 runtime 拉取最新 keys / llm，并重置本地基线与子模态 */
   useEffect(() => {
     if (!open) return
-    setKeyModalOpen(false)
-    setEditingKey(null)
-    setForm(EMPTY_FORM)
-    setMessage(null)
-    setAdminTab('llm')
-    setBaselineReady(false)
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [kRes, lRes] = await Promise.all([fetch('/api/admin/api-keys'), fetch('/api/admin/llm-settings')])
-        const keyList: APIKeyView[] = kRes.ok ? await kRes.json() : []
-        const llmData: LLMSettings | null = lRes.ok ? await lRes.json() : null
-        if (cancelled) return
-        setKeys(keyList.map((k) => ({ ...k })))
-        if (llmData && llmData.storyLLMId !== undefined) {
-          const next: LLMSettings = {
-            storyLLMId: llmData.storyLLMId,
-            pictureLLMId: llmData.pictureLLMId ?? '',
-          }
-          setLlm(next)
-          baselineRef.current = { llm: next, keysSig: keysSnapshot(keyList) }
-        } else {
-          baselineRef.current = { llm: { storyLLMId: '', pictureLLMId: '' }, keysSig: keysSnapshot(keyList) }
-        }
-        setBaselineReady(true)
-      } catch {
-        if (!cancelled) setBaselineReady(true)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [open])
-
-  useEffect(() => {
-    if (!open || !baselineReady || !baselineRef.current) return
     const b = baselineRef.current
     const llmDirty = llm.storyLLMId !== b.llm.storyLLMId || llm.pictureLLMId !== b.llm.pictureLLMId
     const keysDirty = keysSnapshot(keys) !== b.keysSig
     setDirty(llmDirty || keysDirty)
-  }, [open, keys, llm, baselineReady])
+  }, [open, keys, llm])
 
   useEffect(() => {
     const load = () => setAllVoices(speechSynthesis.getVoices())

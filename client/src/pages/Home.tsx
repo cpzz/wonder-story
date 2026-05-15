@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { BookItem, DropdownOptions, Guide, Story, PictureBook } from '@/types'
+import type { BookItem, DropdownOptions, Guide, Story, PictureBook, APIKeyView, LLMSettings } from '@/types'
 import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
 import AdminPage from './Admin'
 
@@ -780,6 +780,9 @@ export default function HomePage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createModalKey, setCreateModalKey] = useState(0)
   const [adminOpen, setAdminOpen] = useState(false)
+  const [adminBootstrap, setAdminBootstrap] = useState<{ keys: APIKeyView[]; llm: LLMSettings } | null>(null)
+  const [adminBootstrapKey, setAdminBootstrapKey] = useState(0)
+  const [adminPrefetching, setAdminPrefetching] = useState(false)
   const [displayLang, setDisplayLang] = useState<'zh' | 'en'>('zh')
   const [options, setOptions] = useState<DropdownOptions>(DEFAULT_OPTIONS)
   const [loading, setLoading] = useState(true)
@@ -801,6 +804,34 @@ export default function HomePage() {
     })
     fetch('/api/llm-status').then((r) => (r.ok ? r.json() : {})).then(setLlmStatus)
   }, [])
+
+  const openAdminSettings = async () => {
+    if (adminPrefetching) return
+    setAdminPrefetching(true)
+    try {
+      const [kRes, lRes] = await Promise.all([fetch('/api/admin/api-keys'), fetch('/api/admin/llm-settings')])
+      const keyList: APIKeyView[] = kRes.ok ? await kRes.json() : []
+      const llmRaw: LLMSettings | null = lRes.ok ? await lRes.json() : null
+      const llm: LLMSettings =
+        llmRaw && llmRaw.storyLLMId !== undefined
+          ? { storyLLMId: llmRaw.storyLLMId, pictureLLMId: llmRaw.pictureLLMId ?? '' }
+          : { storyLLMId: '', pictureLLMId: '' }
+      setAdminBootstrapKey((k) => k + 1)
+      setAdminBootstrap({ keys: keyList.map((k) => ({ ...k })), llm })
+      setAdminOpen(true)
+    } catch {
+      setAdminBootstrapKey((k) => k + 1)
+      setAdminBootstrap({ keys: [], llm: { storyLLMId: '', pictureLLMId: '' } })
+      setAdminOpen(true)
+    } finally {
+      setAdminPrefetching(false)
+    }
+  }
+
+  const closeAdminSettings = () => {
+    setAdminOpen(false)
+    setAdminBootstrap(null)
+  }
 
   const handleCreated = (book: BookItem) => { setBooks((prev) => [book, ...prev]); setSelectedBook(book) }
 
@@ -828,7 +859,13 @@ export default function HomePage() {
         <div className="px-4 py-4 border-b border-gray-100">
           <div className="flex items-center justify-between mb-3">
             <h1 className="font-bold text-gray-800">童心事·绘本</h1>
-            <button onClick={() => setAdminOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="系统设置">
+            <button
+              type="button"
+              onClick={() => { void openAdminSettings() }}
+              disabled={adminPrefetching}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              title="系统设置"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -926,7 +963,15 @@ export default function HomePage() {
           onCreated={handleCreated}
         />
       )}
-      <AdminPage open={adminOpen} onClose={() => setAdminOpen(false)} />
+      {adminOpen && adminBootstrap && (
+        <AdminPage
+          key={adminBootstrapKey}
+          open={adminOpen}
+          initialKeys={adminBootstrap.keys}
+          initialLlm={adminBootstrap.llm}
+          onClose={closeAdminSettings}
+        />
+      )}
     </div>
   )
 }

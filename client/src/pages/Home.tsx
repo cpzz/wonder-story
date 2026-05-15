@@ -156,29 +156,9 @@ type ReaderPage =
   | { type: 'guide' }
   | { type: 'story'; pageNumber: number; text: string; textEn?: string; imagePrompt?: string }
 
-function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void; hasPictureLLM?: boolean }) {
+function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void }) {
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
-  const [generatingImages, setGeneratingImages] = useState(false)
-
-  const handleGenerateImages = async (pageNumber?: number) => {
-    if (!book.id) return
-    setGeneratingImages(true)
-    try {
-      const res = await fetch('/api/qwen-image/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: book.id, ...(pageNumber && { pageNumbers: [pageNumber] }) }),
-      })
-      const data = await res.json()
-      if (!data.success) console.error('[generate images] failed:', data)
-      window.location.reload()
-    } catch (err) {
-      console.error('[generate images] error:', err)
-    } finally {
-      setGeneratingImages(false)
-    }
-  }
 
   const pages: ReaderPage[] = [
     { type: 'cover' },
@@ -315,14 +295,6 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
                       ))}
                     </div>
                     <p className="text-white/60 text-xs">{new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
-                    {hasPictureLLM && (
-                      <button
-                        onClick={() => handleGenerateImages(0)}
-                        disabled={generatingImages}
-                        className="mt-3 bg-white/20 hover:bg-white/30 text-white text-xs px-4 py-1.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        {generatingImages ? '生成中...' : '生成封面插画'}
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -357,14 +329,6 @@ function BookReader({ book, onDisplayLangChange, hasPictureLLM }: { book: BookIt
               <div className="absolute inset-0 flex-col items-center justify-center hidden"
                 style={{ background: `linear-gradient(135deg, ${cover.colors[0]}22, ${cover.colors[1]}44)` }}>
                 <span className="text-8xl">{cover.emoji}</span>
-                {hasPictureLLM && (
-                  <button
-                    onClick={() => handleGenerateImages(cur.pageNumber)}
-                    disabled={generatingImages}
-                    className="mt-4 bg-purple-600 hover:bg-purple-700 text-white text-sm px-5 py-2 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    {generatingImages ? '生成中...' : '生成插画'}
-                  </button>
-                )}
               </div>
               {/* Text overlay at bottom */}
               <div className="absolute bottom-0 left-0 right-0 px-4 py-4"
@@ -786,7 +750,6 @@ export default function HomePage() {
   const [displayLang, setDisplayLang] = useState<'zh' | 'en'>('zh')
   const [options, setOptions] = useState<DropdownOptions>(DEFAULT_OPTIONS)
   const [loading, setLoading] = useState(true)
-  const [llmStatus, setLlmStatus] = useState<{ hasStoryLLM: boolean; hasPictureLLM: boolean }>({ hasStoryLLM: false, hasPictureLLM: false })
 
   useEffect(() => {
     fetch('/api/books').then((r) => (r.ok ? r.json() : [])).then((data: BookItem[]) => {
@@ -802,7 +765,6 @@ export default function HomePage() {
         themes: data.themes ?? DEFAULT_OPTIONS.themes,
       })
     })
-    fetch('/api/llm-status').then((r) => (r.ok ? r.json() : {})).then(setLlmStatus)
   }, [])
 
   const openAdminSettings = async () => {
@@ -950,7 +912,7 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} hasPictureLLM={llmStatus.hasPictureLLM} />
+          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} />
         )}
       </main>
       {createOpen && (

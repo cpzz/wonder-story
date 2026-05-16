@@ -194,6 +194,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
 
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [hasInteracted, setHasInteracted] = useState(false)  // 跟踪用户是否进行了交互
   const defaultVoiceLang = (tl?: string): 'zh' | 'en' | 'off' => {
     if (tl === 'en') return 'en'
     if (uiLocale === 'en') return 'en'
@@ -217,22 +218,30 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
     setVoiceLang(defaultVoiceLang(book.textLang))
     setVoiceEnabled(true)
     setCoverImageFailed(false)
+    setHasInteracted(false)  // 重置交互状态
   }, [book.id, uiLocale])
 
   const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {
     if (!voiceEnabled || voiceLang === 'off') return null
-    if (p.type === 'cover' || p.type === 'guide') return null  // 封面/引导不朗读
+    if (p.type === 'guide') return null  // 引导页不朗读
+    // 封面页只有在用户交互后才朗读
+    if (p.type === 'cover' && !hasInteracted) return null
     const getStoredVoice = (lang: 'zh' | 'en') => {
       const all = speechSynthesis.getVoices()
       const name = localStorage.getItem(lang === 'zh' ? 'wstory_zh_voice' : 'wstory_en_voice')
       if (name) return all.find((v) => v.name === name) ?? all.find((v) => v.lang.startsWith(lang)) ?? null
       return all.find((v) => v.lang.startsWith(lang)) ?? null
     }
+    // 封面页朗读标题
+    if (p.type === 'cover') {
+      const title = voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text
+      return { text: title, voice: getStoredVoice(voiceLang === 'en' ? 'en' : 'zh') }
+    }
     if (voiceLang === 'en') {
       return { text: p.textEn ?? p.text ?? '', voice: getStoredVoice('en') }
     }
     return { text: p.text, voice: getStoredVoice('zh') }
-  }, [book, voiceLang, voiceEnabled])
+  }, [book, voiceLang, voiceEnabled, hasInteracted])
 
   const speak = useCallback((p: ReaderPage) => {
     speechSynthesis.cancel()
@@ -277,7 +286,12 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
     return () => { if (timerRef.current) clearTimeout(timerRef.current); speechSynthesis.cancel() }
   }, [playing, idx, getSpeakable])
 
-  const goTo = (i: number) => { speechSynthesis.cancel(); setPlaying(false); setIdx(i) }
+  const goTo = (i: number) => { 
+    speechSynthesis.cancel() 
+    setPlaying(false) 
+    setIdx(i)
+    setHasInteracted(true)  // 用户导航时标记为已交互
+  }
   const prev = () => goTo(Math.max(0, idx - 1))
   const next = () => goTo(Math.min(total - 1, idx + 1))
 
@@ -407,7 +421,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
           </button>
 
           {/* Auto-play toggle */}
-          <button onClick={() => setPlaying((p) => !p)}
+          <button onClick={() => { setPlaying((p) => !p); setHasInteracted(true) }}
             className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border transition-all ${playing ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 text-gray-500 hover:text-purple-600 hover:border-purple-300'}`}
             title={playing ? t('reader.pause') : t('reader.play')}>
             {playing ? (

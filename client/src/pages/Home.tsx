@@ -181,7 +181,6 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
 
   const pages: ReaderPage[] = [
     { type: 'cover' },
-    { type: 'guide' },
     ...[...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({
       type: 'story' as const,
       pageNumber: p.pageNumber,
@@ -191,6 +190,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
     })),
   ]
   const total = pages.length
+  const storyPageCount = book.story.pages.length
 
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -264,7 +264,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
       } else {
         timerRef.current = setTimeout(() => {
           setIdx((i) => { if (i < total - 1) return i + 1; return i })
-        }, 6000)
+        }, 1000)
       }
     } else {
       if (s) {
@@ -464,7 +464,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
 
           {/* Page label */}
           <span className="text-xs text-gray-400 text-right flex-shrink-0" style={{ width: '48px' }}>
-            {idx === 0 ? t('reader.cover') : `${idx}/${total - 1}`}
+            {idx === 0 ? t('reader.cover') : `${idx}/${storyPageCount}`}
           </span>
         </div>
       </div>

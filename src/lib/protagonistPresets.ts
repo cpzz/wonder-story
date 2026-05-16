@@ -1,4 +1,4 @@
-import type { TextLang } from '@/types'
+import type { UILang } from '@/types'
 
 /** 创作表单「主角选择」；选「自动」时在用户消息末尾追加随机抽象多样性指引（不列举具体动物） */
 export const PROTAGONIST_PRESET_AUTO = 'protagonist.auto' as const
@@ -99,7 +99,7 @@ function pickAutoProtagonistDiversityBrief(lang?: string): string {
  * - 「自动」：追加一条随机的抽象角色多样性指引（不列举具体动物）。
  * - 非「自动」：严格按用户所选类型约束主角与家庭。
  */
-export function buildProtagonistPromptSuffix(preset?: string, lang?: TextLang): string {
+export function buildProtagonistPromptSuffix(preset?: string, lang?: UILang): string {
   const p = (preset ?? PROTAGONIST_PRESET_AUTO).trim()
   const isEn = lang === 'en'
   if (!p || p === PROTAGONIST_PRESET_AUTO) {

@@ -22,6 +22,8 @@ router.post('/', (req, res) => {
       theme,
       characters,
       illustrationStyleId,
+      textLang,
+      uiLang,
     } = req.body
     if (!ageGroup || !guide || !story) {
       return res.status(400).json({ error: '缺少必填字段' })
@@ -39,6 +41,8 @@ router.post('/', (req, res) => {
       theme,
       characters,
       illustrationStyleId,
+      textLang,
+      uiLang,
     })
     console.log(
       `[books] saved book id=${book.id}, pages=${story.pages?.length}, chars=${characters?.length}, coverImagePrompt=${!!story.cover?.imagePrompt}, style=${illustrationStyleId ?? 'none'}`,

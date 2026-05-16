@@ -4,7 +4,7 @@ import { getPromptByType } from '@/lib/promptStore'
 import { fillTemplate } from '@/lib/templateUtils'
 import { DEFAULT_STORY_TEMPLATE, DEFAULT_BEDTIME_STORY_TEMPLATE, getLocalizedNameAndPrompts } from '@/lib/defaultPrompts'
 import { buildProtagonistPromptSuffix } from '@/lib/protagonistPresets'
-import type { TroubleInput, Story, CharacterCard, TextLang } from '@/types'
+import type { TroubleInput, Story, CharacterCard, UILang } from '@/types'
 
 // LLM now returns characters + story in one response
 interface StoryRaw {
@@ -24,9 +24,9 @@ const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description = '', mode = 'emotion', theme = '', protagonistPreset, textLang = 'bilingual' }: TroubleInput & { textLang?: TextLang } =
+    const { emotion, scene, ageGroup, description = '', mode = 'emotion', theme = '', protagonistPreset, textLang = 'bilingual', uiLang = 'zh' }: TroubleInput & { uiLang?: UILang } =
       req.body
-    const lang: TextLang = textLang ?? 'bilingual'
+    const lang: UILang = uiLang ?? 'zh'
     if (!ageGroup) {
       return res.status(400).json({ error: lang === 'en' ? 'Missing required field: ageGroup' : '缺少必填字段: ageGroup' })
     }
@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
       const localized = getLocalizedNameAndPrompts('bedtime-story', lang)
       const systemPrompt = localized.systemPrompt
       const userPromptTemplate = localized.userPromptTemplate
-      console.log(`[story] bedtime mode, ageGroup=${ageGroup}, theme=${theme}, lang=${lang}`)
+      console.log(`[story] bedtime mode, ageGroup=${ageGroup}, theme=${theme}, uiLang=${lang}`)
       const userPrompt =
         fillTemplate(userPromptTemplate, { ageGroup, theme: themeHint, description: descHint }) +
         buildProtagonistPromptSuffix(protagonistPreset, lang)
@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
     const descHint = description
       ? (lang === 'en' ? `Extra requirements: ${description}` : `额外要求：${description}`)
       : ''
-    console.log(`[story] emotion mode, emotion=${emotion}, scene=${scene}, ageGroup=${ageGroup}, lang=${lang}`)
+    console.log(`[story] emotion mode, emotion=${emotion}, scene=${scene}, ageGroup=${ageGroup}, uiLang=${lang}`)
     const userPrompt =
       fillTemplate(userPromptTemplate, { emotion, scene, ageGroup, description: descHint }) +
       buildProtagonistPromptSuffix(protagonistPreset, lang)

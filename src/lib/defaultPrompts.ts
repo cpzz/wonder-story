@@ -1,4 +1,4 @@
-import type { PromptTemplate, TextLang } from '@/types'
+import type { PromptTemplate, UILang } from '@/types'
 
 type TemplateBase = Omit<PromptTemplate, 'id' | 'createdAt' | 'updatedAt'>
 
@@ -109,20 +109,20 @@ Return the result in JSON format only (no other content):
 {
   "characters": [
     {
-      "name": "Character Name (Chinese)",
-      "nameEn": "Character Name (English)",
-      "role": "protagonist",
-      "species": "species",
-      "face": "facial features",
-      "color": "fur/skin color",
-      "outfit": "clothing description",
-      "bodyType": "body proportions",
-      "personality": "personality traits",
-      "forbidden": "forbidden elements",
+      "name": "Character Chinese name",
+      "nameEn": "Character English name",
+      "role": "protagonist or supporting",
+      "species": "species in English",
+      "face": "facial features in English",
+      "color": "fur/skin color in English",
+      "outfit": "clothing description in English",
+      "bodyType": "body proportions in English",
+      "personality": "personality traits in English",
+      "forbidden": "forbidden elements in English",
       "refPrompt": "English prompt for reference image"
     }
   ],
-  "title": "Story Title (Chinese)",
+  "title": "Story Title",
   "pages": [
     {"pageNumber": 1, "text": "Page 1 content"},
     {"pageNumber": 2, "text": "..."},
@@ -130,7 +130,7 @@ Return the result in JSON format only (no other content):
   ]
 }
 
-Generate a complete story with 6-8 pages, 2-3 sentences per page.`
+Generate a complete story with 6-8 pages, 2-3 sentences per page. All character description fields must be in English."`
 
 export const DEFAULT_STORY_TEMPLATE: TemplateBase = {
   name: '默认故事生成模板',
@@ -272,20 +272,20 @@ Return the result in JSON format only (no other content):
 {
   "characters": [
     {
-      "name": "Character Name (Chinese)",
-      "nameEn": "Character Name (English)",
-      "role": "protagonist",
-      "species": "species",
-      "face": "facial features",
-      "color": "fur/skin color",
-      "outfit": "clothing description",
-      "bodyType": "body proportions",
-      "personality": "personality traits",
-      "forbidden": "forbidden elements",
+      "name": "Character Chinese name",
+      "nameEn": "Character English name",
+      "role": "protagonist or supporting",
+      "species": "species in English",
+      "face": "facial features in English",
+      "color": "fur/skin color in English",
+      "outfit": "clothing description in English",
+      "bodyType": "body proportions in English",
+      "personality": "personality traits in English",
+      "forbidden": "forbidden elements in English",
       "refPrompt": "English prompt for reference image"
     }
   ],
-  "title": "Story Title (Chinese)",
+  "title": "Story Title",
   "pages": [
     {"pageNumber": 1, "text": "Page 1 content"},
     {"pageNumber": 2, "text": "..."},
@@ -293,7 +293,7 @@ Return the result in JSON format only (no other content):
   ]
 }
 
-Generate a complete bedtime story with 6-8 pages, 2-3 sentences per page.`
+Generate a complete bedtime story with 6-8 pages, 2-3 sentences per page. All character description fields must be in English."`
 
 export const DEFAULT_BEDTIME_STORY_TEMPLATE: TemplateBase = {
   name: '默认睡前故事模板',
@@ -346,9 +346,9 @@ export function getDefaultPrompts(): PromptTemplate[] {
  */
 export function getLocalizedNameAndPrompts(
   type: PromptTemplate['type'],
-  textLang: TextLang,
+  uiLang: UILang,
 ): { name: string; systemPrompt: string; userPromptTemplate: string } {
-  const isEn = textLang === 'en'
+  const isEn = uiLang === 'en'
   switch (type) {
     case 'story':
       return {

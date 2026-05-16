@@ -195,12 +195,12 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [hasInteracted, setHasInteracted] = useState(false)  // 跟踪用户是否进行了交互
-  const defaultVoiceLang = (tl?: string): 'zh' | 'en' | 'off' => {
-    if (tl === 'en') return 'en'
+  const defaultVoiceLang = (uiLang?: string): 'zh' | 'en' | 'off' => {
+    if (uiLang === 'en') return 'en'
     if (uiLocale === 'en') return 'en'
     return 'zh'
   }
-  const [voiceLang, setVoiceLang] = useState<'zh' | 'en' | 'off'>(() => defaultVoiceLang(book.textLang))
+  const [voiceLang, setVoiceLang] = useState<'zh' | 'en' | 'off'>(() => defaultVoiceLang(book.uiLang))
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [guideOpen, setGuideOpen] = useState(false)
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({})
@@ -215,7 +215,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
   // Reset when book changes or UI locale changes
   useEffect(() => {
     setIdx(0); setPlaying(false); speechSynthesis.cancel()
-    setVoiceLang(defaultVoiceLang(book.textLang))
+    setVoiceLang(defaultVoiceLang(book.uiLang))
     setVoiceEnabled(true)
     setCoverImageFailed(false)
     setHasInteracted(false)  // 重置交互状态
@@ -510,7 +510,8 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
   const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID)
-  const textLang: 'zh' | 'en' | 'bilingual' = displayLang === 'en' ? 'en' : 'bilingual'
+  const textLang: 'bilingual' = 'bilingual' // 始终为双语模式
+  const uiLang: 'zh' | 'en' = displayLang
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -545,7 +546,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
       return
     }
     setError(null); setGenerating(true)
-    const input = { emotion, scene, ageGroup, description, protagonistPreset, mode, theme, textLang }
+    const input = { emotion, scene, ageGroup, description, protagonistPreset, mode, theme, textLang, uiLang }
     try {
       // Guide (background step, no numbered display)
       setGenStep(mode === 'bedtime' ? t('create.step.preparingGuide') : t('create.step.analyzingEmotion'))

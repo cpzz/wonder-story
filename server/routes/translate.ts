@@ -160,24 +160,7 @@ ${JSON.stringify(input, null, 2)}`
       `[translate] story: cover imagePrompt=${!!translatedStory.cover.imagePrompt}, pages=${translatedStory.pages.length}, emptyPrompts=${translatedStory.pages.filter((p) => !p.imagePrompt).length}`,
     )
 
-    if (textLang === 'en') {
-      return res.json({
-        story: {
-          cover: {
-            text: '',
-            textEn: translatedStory.cover.textEn,
-            imagePrompt: translatedStory.cover.imagePrompt,
-          },
-          pages: translatedStory.pages.map((p) => ({ ...p, text: '', textEn: p.textEn, imagePrompt: p.imagePrompt })),
-        } as Story,
-        guide: {
-          emotion: { text: '', textEn: translatedGuide.emotion.textEn },
-          message: { text: '', textEn: translatedGuide.message.textEn },
-          tips: { text: [], textEn: translatedGuide.tips.textEn },
-        } as Guide,
-      })
-    }
-
+    // 始终返回完整的双语数据，不因 UI 语言而清空任何字段
     res.json({ story: translatedStory, guide: translatedGuide })
   } catch (err) {
     console.error('[POST /api/translate]', err)

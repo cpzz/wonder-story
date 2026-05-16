@@ -77,6 +77,7 @@ export interface PromptTemplate {
 }
 
 export type TextLang = 'zh' | 'en' | 'bilingual'
+export type UILang = 'zh' | 'en'
 
 export interface TroubleInput {
   emotion: string
@@ -89,6 +90,7 @@ export interface TroubleInput {
   mode?: 'emotion' | 'bedtime'
   theme?: string
   textLang?: TextLang
+  uiLang?: UILang
 }
 
 export interface StoryPage {
@@ -147,6 +149,7 @@ export interface BookItem {
   mode?: 'emotion' | 'bedtime'
   theme?: string
   textLang?: TextLang
+  uiLang?: UILang
   illustrationStyleId?: string
   characters?: CharacterCard[]
   guide: Guide

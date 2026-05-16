@@ -8,13 +8,26 @@
 
 ## 功能特性
 
-- **情绪故事**：按情绪、场景、年龄生成故事，并附家长引导建议  
-- **睡前故事**：按主题与年龄生成舒缓睡前故事  
-- **阅读器**：翻页阅读（封面、故事页），Web Speech 朗读与音色选择  
-- **可选插图**：创作流程中若已配置支持文生图的 API Key，会在保存绘本后依次生成定妆参考图与内页/封面图（仅创建时尝试，无单独「补生成」入口）  
-- **多模型**：OpenAI 兼容接口，可在管理里配置多家提供商的 Key  
+### 📖 故事创作
+- **情绪故事**：按情绪类型、场景、年龄生成故事，帮助孩子理解和管理情绪
+- **睡前故事**：按主题与年龄生成舒缓睡前故事，融入夜晚、星空、梦境等意象
+- **家长引导**：每本绘本附带专业的家长引导建议，帮助理解孩子情绪
 
-故事与引导使用的提示词为代码内置（`src/lib/defaultPrompts.ts`），不提供 Web 端修改。
+### 🎨 插图生成
+- **角色定妆图**：为每个角色生成标准参考图，保证角色一致性
+- **页面插图**：自动生成封面和内页插图，支持 9 种插画风格
+- **多模态参考**：使用角色定妆图作为参考，确保跨页面角色外观一致
+
+### 📚 阅读体验
+- **翻页阅读**：支持封面、故事页翻页浏览
+- **语音朗读**：基于 Web Speech API，支持中英文双语朗读
+- **自动播放**：读完自动翻页，适合孩子独立使用
+- **音色选择**：可自定义中文/英文朗读语音
+
+### ⚙️ 系统管理
+- **多模型支持**：兼容 OpenAI、DeepSeek、通义千问、智谱 AI 等主流提供商
+- **密钥管理**：支持添加多个 API Key，分别用于故事生成和插图生成
+- **安全加密**：API Key 使用 AES-256-GCM 加密存储
 
 ---
 
@@ -22,11 +35,12 @@
 
 | 层 | 技术 |
 |---|---|
-| 前端 | React 18 + Vite 5 + TypeScript + Tailwind CSS v3 |
-| 后端 | Express 4 + tsx |
-| LLM | OpenAI SDK v4（自定义 `baseURL`） |
-| 存储 | 本地 JSON：`user/settings/`（配置、选项）、`user/books/<id>/`（绘本与图片） |
-| 安全 | API Key 使用 AES-256-GCM，密钥在 `user/settings/.key` |
+| 前端 | React 18 + Vite 8 + TypeScript + Tailwind CSS v3 |
+| 后端 | Express 4 + tsx (TypeScript 运行时) |
+| LLM | OpenAI SDK v4（兼容所有 OpenAI 格式 API） |
+| 图像生成 | 通义万相（阿里云 DashScope API） |
+| 存储 | 本地 JSON 文件系统 |
+| 安全 | AES-256-GCM 加密 API Key |
 
 ---
 
@@ -53,68 +67,108 @@ npm start       # 仅启动 API（默认 :3002）；生产环境需自行托管 
 
 ## 配置说明
 
-主界面右上角齿轮打开**系统设置**：
+### 首次使用
 
-- **API Key**：添加、编辑密钥；勾选「支持图像生成」的 Key 可作为绘本绘图模型  
-- **故事 / 绘本 LLM**：选择对应 Key  
-- 点击**保存设置**会通过 `POST /api/admin/config/persist` 一次性写入 `user/settings/config.json`  
+1. 点击右上角 ⚙️ 图标打开**系统设置**
+2. 切换到「大模型配置」标签页
+3. 点击「添加 API Key」，填写以下信息：
+   - **大模型提供商**：从预设中选择（OpenAI、DeepSeek、通义千问等）或自定义
+   - **名称**：便于识别的标签（如「我的 GPT-4o」）
+   - **模型**：模型名称（如 `gpt-4o`、`qwen-max`）
+   - **服务地址**：API Base URL（预设会自动填充）
+   - **API 密钥**：你的 API Key
+   - **支持图像生成**：如果该 Key 支持文生图（如通义万相），勾选此项
 
----
+4. 在「故事生成模型」和「绘本图片模型」下拉框中选择对应的 Key
+5. 点击「保存设置」
 
-## 项目结构（节选）
+### 支持的提供商预设
 
-```
-wonder-story/
-├── client/src/pages/       # Home.tsx、Admin.tsx
-├── server/
-│   ├── index.ts
-│   └── routes/             # books、story、trouble、translate、qwenImage、options、llm-status、admin/*
-├── src/
-│   ├── types/index.ts
-│   └── lib/                # llm、booksStore、configStore、promptStore、defaultPrompts、optionsStore…
-└── user/                   # 本地数据（.gitignore，含 settings 与 books）
-```
+- OpenAI（gpt-4o）
+- Anthropic（claude-3-5-sonnet）
+- DeepSeek（deepseek-chat）
+- 阿里云通义千问（qwen-max）
+- 百度文心一言（ernie-4.0-8k）
+- 智谱 AI（glm-4-flash）
+- 月之暗面 Moonshot（moonshot-v1-8k）
+- 字节跳动豆包（doubao-pro-4k）
+- 移动云（cmecloud）
 
----
-
-## HTTP API（摘要）
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/books` | 绘本列表 |
-| GET | `/api/books/:id` | 单本详情 |
-| POST | `/api/books` | 新建绘本 |
-| DELETE | `/api/books/:id` | 删除绘本 |
-| GET | `/api/books/:id/images/:pageNumber` | 某页插图文件 |
-| GET | `/api/books/:id/refs/:index` | 角色定妆参考图 |
-| POST | `/api/story` | 生成角色 + 中文故事 |
-| POST | `/api/trouble` | 生成家长引导 |
-| POST | `/api/translate` | 翻译并在 `story.cover` / `story.pages[].imagePrompt` 中写入插图描述 |
-| GET | `/api/options` | 下拉选项 |
-| PUT | `/api/options` | 更新下拉选项 |
-| GET | `/api/llm-status` | 是否已配置故事/绘图 Key |
-| POST | `/api/qwen-image/gen-refs` | 生成角色定妆图（内部/创作流程） |
-| POST | `/api/qwen-image/generate` | 按页生成插图（内部/创作流程） |
-| POST | `/api/qwen-image/test` | 连通性测试 |
-| GET | `/api/admin/api-keys` | Key 列表（脱敏） |
-| GET | `/api/admin/llm-settings` | 当前 LLM 选择 |
-| POST | `/api/admin/config/persist` | **唯一写入口**：保存 Key 与 LLM 设置 |
-
-对 `/api/admin/api-keys` 的 POST/PUT/DELETE 与对 `/api/admin/llm-settings` 的 PUT 会返回 405，提示改用 `config/persist`。
+> 💡 **提示**：故事生成只需普通 LLM Key，插图生成需要支持文生图的 Key（如阿里云的 `qwen-image-2.0-pro`）  
 
 ---
 
-## 数据与安全
+## 创作流程详解
 
-- `user/settings/config.json`：API Key（密文）、LLM 选中项  
-- `user/settings/.key`：本地加密主密钥（勿泄露、勿与密文分离后乱删）  
-- `user/settings/options.json`：创作表单下拉项（首次运行自动生成）  
-- `user/books/<uuid>/`：每本绘本的 `index.json`、插图与定妆图  
+### 1️⃣ 选择故事模式
 
-`user/` 已加入 `.gitignore`。
+**情绪故事模式**：
+- 必填：孩子年龄（2-14 岁）、情绪类型、发生场景
+- 可选：插画风格、主角预设、具体描述
+
+**睡前故事模式**：
+- 必填：孩子年龄（2-14 岁）
+- 可选：故事主题、插画风格、主角预设、额外想法
+
+**插画风格**（9 种可选）：清新水彩（默认）、可爱治愈、简约扁平、卡通夸张、复古经典、国风水墨、拼贴手工、写实细腻、版画装饰
+
+### 2️⃣ AI 生成内容
+
+系统会自动完成以下步骤：
+
+1. **分析情绪** → 生成家长引导建议（理解孩子情绪的方法 + 4 条实用建议）
+2. **构建角色** → 设计 2-4 个角色档案卡（物种、外貌、服饰、性格）
+3. **创作故事** → 生成 6-8 页温暖故事（每页 2-3 句话）
+4. **翻译内容** → 生成中英文双语版本 + 每页英文插图描述
+5. **保存绘本** → 持久化到本地文件系统
+6. **生成插图**（需配置图片模型）：
+   - 为每个角色生成定妆参考图（标准站姿、白色背景）
+   - 生成封面插图（1024×1024）
+   - 逐页生成内页插图（保持角色一致性）
+
+### 3️⃣ 阅读绘本
+
+- 点击左侧列表中的绘本即可打开阅读器
+- 使用底部导航栏翻页，或点击圆点跳转
+- 点击「💛 给家长的话」查看引导建议
+- 使用「中/英」切换朗读语言
+- 点击「▶️」开启自动播放
 
 ---
+
+## 数据说明
+
+- 所有绘本数据存储在本地 `user/` 目录中（已加入 `.gitignore`）
+- API Key 经加密存储，管理界面仅显示掩码版本
+- **请勿删除** `user/settings/.key` 文件，否则无法解密已保存的 API Key
+- 建议定期备份 `user/` 目录
+
+---
+
+## 常见问题
+
+### Q: 支持哪些 AI 模型？
+
+A: 理论上支持任何兼容 OpenAI 格式的 LLM API。已测试的提供商包括：
+- **故事生成**：OpenAI GPT-4o、DeepSeek、通义千问、智谱 GLM 等
+- **插图生成**：阿里云通义万相（`qwen-image-2.0-pro`）
+
+### Q: 为什么插图生成很慢？
+
+A: 为避免 API 限流，系统每次请求间隔至少 10 秒，一本 8 页绘本大约需要 1-2 分钟完成所有插图。
+
+### Q: 可以重新生成插图吗？
+
+A: 当前版本仅在创建绘本时自动生成插图，暂不支持单独重新生成。
+
+### Q: 数据会丢失吗？
+
+A: 所有数据存储在本地 `user/` 目录中，建议定期备份。请勿删除 `.key` 文件，否则无法解密已保存的 API Key。
 
 ## License
 
 MIT
+
+---
+
+💝 用一个故事，陪孩子走过每一种情绪。

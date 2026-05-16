@@ -278,7 +278,7 @@ router.post('/test', async (req, res) => {
 
     const keyConfig = getActiveLLMKey('picture')
     if (!keyConfig) {
-      return res.status(400).json({ error: '未配置绘本图片模型' })
+      return res.status(400).json({ error: 'Illustration model not configured' })
     }
 
     const plainKey = decrypt(keyConfig.keyEncrypted)

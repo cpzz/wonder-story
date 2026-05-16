@@ -9,10 +9,10 @@ router.post('/persist', (req, res) => {
   try {
     const body = req.body as { llmSettings?: LLMSettings; apiKeys?: AdminPersistApiKeyInput[] }
     if (!body.llmSettings || typeof body.llmSettings !== 'object') {
-      return res.status(400).json({ error: '请求体需包含 llmSettings 对象' })
+      return res.status(400).json({ error: 'Request body must contain llmSettings object' })
     }
     if (!Array.isArray(body.apiKeys)) {
-      return res.status(400).json({ error: '请求体需包含 apiKeys 数组' })
+      return res.status(400).json({ error: 'Request body must contain apiKeys array' })
     }
     applyFullAdminPersist({
       apiKeys: body.apiKeys,

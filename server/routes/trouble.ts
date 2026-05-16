@@ -2,8 +2,8 @@ import { Router } from 'express'
 import { generateJSON } from '@/lib/llm'
 import { getPromptByType } from '@/lib/promptStore'
 import { fillTemplate } from '@/lib/templateUtils'
-import { DEFAULT_GUIDE_TEMPLATE, DEFAULT_BEDTIME_GUIDE_TEMPLATE } from '@/lib/defaultPrompts'
-import type { TroubleInput, Guide } from '@/types'
+import { DEFAULT_GUIDE_TEMPLATE, DEFAULT_BEDTIME_GUIDE_TEMPLATE, getLocalizedNameAndPrompts } from '@/lib/defaultPrompts'
+import type { TroubleInput, Guide, TextLang } from '@/types'
 
 interface GuideRaw { emotion: string; message: string; tips: string[] }
 
@@ -19,23 +19,28 @@ const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { emotion, scene, ageGroup, description = '', mode = 'emotion', theme = '' }: TroubleInput = req.body
+    const { emotion, scene, ageGroup, description = '', mode = 'emotion', theme = '', textLang = 'bilingual' }: TroubleInput & { textLang?: TextLang } = req.body
+    const lang: TextLang = textLang ?? 'bilingual'
     if (mode === 'bedtime') {
-      if (!ageGroup) return res.status(400).json({ error: '缺少必填字段: ageGroup' })
-      const themeHint = theme ? `故事主题：${theme}` : ''
-      const descHint = description ? `备注：${description}` : ''
-      const template = getPromptByType('bedtime-guide') ?? { ...DEFAULT_BEDTIME_GUIDE_TEMPLATE, id: 'default' }
-      console.log(`[trouble] bedtime mode, ageGroup=${ageGroup}, theme=${theme}`)
-      const raw = await generateJSON<GuideRaw>(template.systemPrompt, fillTemplate(template.userPromptTemplate, { ageGroup, description: descHint }))
+      if (!ageGroup) return res.status(400).json({ error: lang === 'en' ? 'Missing required field: ageGroup' : '缺少必填字段: ageGroup' })
+      const themeHint = theme
+        ? (lang === 'en' ? `Story theme: ${theme}` : `故事主题：${theme}`)
+        : ''
+      const descHint = description
+        ? (lang === 'en' ? `Note: ${description}` : `备注：${description}`)
+        : ''
+      const localized = getLocalizedNameAndPrompts('bedtime-guide', lang)
+      console.log(`[trouble] bedtime mode, ageGroup=${ageGroup}, theme=${theme}, lang=${lang}`)
+      const raw = await generateJSON<GuideRaw>(localized.systemPrompt, fillTemplate(localized.userPromptTemplate, { ageGroup, description: descHint }))
       console.log(`[trouble] bedtime guide done: emotion=${raw.emotion}, tips=${raw.tips?.length}`)
       return res.json(wrapRaw(raw))
     }
     if (!emotion || !scene || !ageGroup) {
-      return res.status(400).json({ error: '缺少必填字段: emotion, scene, ageGroup' })
+      return res.status(400).json({ error: lang === 'en' ? 'Missing required fields: emotion, scene, ageGroup' : '缺少必填字段: emotion, scene, ageGroup' })
     }
-    const template = getPromptByType('guide') ?? { ...DEFAULT_GUIDE_TEMPLATE, id: 'default' }
-    console.log(`[trouble] emotion mode, emotion=${emotion}, scene=${scene}, ageGroup=${ageGroup}`)
-    const raw = await generateJSON<GuideRaw>(template.systemPrompt, fillTemplate(template.userPromptTemplate, { emotion, scene, ageGroup, description }))
+    const localized = getLocalizedNameAndPrompts('guide', lang)
+    console.log(`[trouble] emotion mode, emotion=${emotion}, scene=${scene}, ageGroup=${ageGroup}, lang=${lang}`)
+    const raw = await generateJSON<GuideRaw>(localized.systemPrompt, fillTemplate(localized.userPromptTemplate, { emotion, scene, ageGroup, description }))
     console.log(`[trouble] guide done: emotion=${raw.emotion}, tips=${raw.tips?.length}`)
     res.json(wrapRaw(raw))
   } catch (err) {

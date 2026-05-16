@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { APIKeyView, LLMSettings } from '@/types'
+import { useI18n } from '../i18n'
+import '../i18n/locales'
 
 type LocalKeyRow = APIKeyView & { pendingApiKey?: string }
 
@@ -32,16 +34,16 @@ interface APIKeyFormData {
 const EMPTY_FORM: APIKeyFormData = { name: '', provider: '', model: '', baseURL: '', apiKey: '', supportsImageGen: false }
 
 const PROVIDER_PRESETS = [
-  { label: '-- 自定义 --', provider: '', model: '', baseURL: '' },
-  { label: 'OpenAI', provider: 'openai', model: 'gpt-4o', baseURL: 'https://api.openai.com/v1' },
-  { label: 'Anthropic', provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', baseURL: 'https://api.anthropic.com/v1' },
-  { label: 'DeepSeek（深度求索）', provider: 'deepseek', model: 'deepseek-chat', baseURL: 'https://api.deepseek.com/v1' },
-  { label: '阿里云（通义千问）', provider: 'alibaba', model: 'qwen-max', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
-  { label: '百度（文心一言）', provider: 'baidu', model: 'ernie-4.0-8k', baseURL: 'https://qianfan.baidubce.com/v2' },
-  { label: '智谱 AI（GLM）', provider: 'zhipu', model: 'glm-4-flash', baseURL: 'https://open.bigmodel.cn/api/paas/v4' },
-  { label: '月之暗面（Moonshot）', provider: 'moonshot', model: 'moonshot-v1-8k', baseURL: 'https://api.moonshot.cn/v1' },
-  { label: '字节跳动（豆包）', provider: 'bytedance', model: 'doubao-pro-4k', baseURL: 'https://ark.cn-beijing.volces.com/api/v3' },
-  { label: '移动云（cmecloud）', provider: 'cmecloud', model: '', baseURL: 'https://zhenze-huhehaote.cmecloud.cn/v1' },
+  { labelKey: 'admin.provider.custom', provider: '', model: '', baseURL: '' },
+  { labelKey: 'admin.provider.openai', provider: 'openai', model: 'gpt-4o', baseURL: 'https://api.openai.com/v1' },
+  { labelKey: 'admin.provider.anthropic', provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', baseURL: 'https://api.anthropic.com/v1' },
+  { labelKey: 'admin.provider.deepseek', provider: 'deepseek', model: 'deepseek-chat', baseURL: 'https://api.deepseek.com/v1' },
+  { labelKey: 'admin.provider.alibaba', provider: 'alibaba', model: 'qwen-max', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { labelKey: 'admin.provider.baidu', provider: 'baidu', model: 'ernie-4.0-8k', baseURL: 'https://qianfan.baidubce.com/v2' },
+  { labelKey: 'admin.provider.zhipu', provider: 'zhipu', model: 'glm-4-flash', baseURL: 'https://open.bigmodel.cn/api/paas/v4' },
+  { labelKey: 'admin.provider.moonshot', provider: 'moonshot', model: 'moonshot-v1-8k', baseURL: 'https://api.moonshot.cn/v1' },
+  { labelKey: 'admin.provider.bytedance', provider: 'bytedance', model: 'doubao-pro-4k', baseURL: 'https://ark.cn-beijing.volces.com/api/v3' },
+  { labelKey: 'admin.provider.cmecloud', provider: 'cmecloud', model: '', baseURL: 'https://zhenze-huhehaote.cmecloud.cn/v1' },
 ]
 
 export default function AdminPage({
@@ -55,6 +57,7 @@ export default function AdminPage({
   initialKeys: APIKeyView[]
   initialLlm: LLMSettings
 }) {
+  const { t, locale, setLocale } = useI18n()
   const [message, setMessage] = useState<Message | null>(null)
   const [adminTab, setAdminTab] = useState<'llm' | 'tts'>('llm')
 
@@ -110,7 +113,7 @@ export default function AdminPage({
   const closeKeyModal = () => { setKeyModalOpen(false); setEditingKey(null); setForm(EMPTY_FORM) }
   const handleKeySubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name.trim()) { showMsg('error', '请填写名称'); return }
+    if (!form.name.trim()) { showMsg('error', t('admin.keyNameRequired')); return }
     if (!editingKey) {
       const id = `new_${crypto.randomUUID()}`
       const now = new Date().toISOString()
@@ -121,7 +124,7 @@ export default function AdminPage({
         provider: form.provider.trim(),
         model: form.model.trim(),
         baseURL: form.baseURL.trim() || undefined,
-        keyMasked: secret ? '（待保存）' : '（未填写）',
+        keyMasked: secret ? t('admin.keyPending') : t('admin.keyEmpty'),
         supportsImageGen: form.supportsImageGen,
         createdAt: now,
         updatedAt: now,
@@ -144,7 +147,7 @@ export default function AdminPage({
       }
       if (form.apiKey.trim()) {
         next.pendingApiKey = form.apiKey.trim()
-        next.keyMasked = '（待保存）'
+        next.keyMasked = t('admin.keyPending')
       } else if (!isDraftKeyId(row.id)) {
         delete next.pendingApiKey
       }
@@ -153,7 +156,7 @@ export default function AdminPage({
     closeKeyModal()
   }
   const handleDeleteKey = (id: string) => {
-    if (!confirm('确认删除此 API Key？')) return
+    if (!confirm(t('admin.confirmDeleteKey'))) return
     setKeys((prev) => prev.filter((k) => k.id !== id))
     setLlm((prev) => ({
       storyLLMId: prev.storyLLMId === id ? '' : prev.storyLLMId,
@@ -190,7 +193,7 @@ export default function AdminPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ llmSettings: llm, apiKeys }),
       })
-      let errMsg = '保存失败'
+      let errMsg = t('admin.saveFail')
       if (!res.ok) {
         try {
           const j = await res.json()
@@ -203,7 +206,7 @@ export default function AdminPage({
       }
       setDirty(false)
       onClose()
-    } catch (err) { showMsg('error', err instanceof Error ? err.message : '保存失败') }
+    } catch (err) { showMsg('error', err instanceof Error ? err.message : t('admin.saveFail')) }
     finally { setLlmSaving(false) }
   }
   const imageGenKeys = keys.filter((k) => k.supportsImageGen)
@@ -218,7 +221,7 @@ export default function AdminPage({
 
         {/* Header */}
         <header className="bg-white rounded-t-2xl border-b border-gray-100 px-6 py-4 flex items-center justify-between flex-shrink-0">
-          <h1 className="font-bold text-gray-800 text-lg">系统设置</h1>
+          <h1 className="font-bold text-gray-800 text-lg">{t('admin.title')}</h1>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
         </header>
 
@@ -235,9 +238,9 @@ export default function AdminPage({
           {/* Tabs */}
           <div className="flex items-center mb-6">
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-              {([['llm', '大模型配置'], ['tts', '朗读设置']] as const).map(([t, label]) => (
-                <button key={t} onClick={() => setAdminTab(t)}
-                  className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${adminTab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {([['llm', t('admin.tabLlm')], ['tts', t('admin.tabTts')]] as const).map(([tab, label]) => (
+                <button key={tab} onClick={() => setAdminTab(tab)}
+                  className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${adminTab === tab ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                   {label}
                 </button>
               ))}
@@ -248,22 +251,22 @@ export default function AdminPage({
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">故事生成模型</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.storyModel')}</label>
                 <select value={llm.storyLLMId} onChange={(e) => setLlm({ ...llm, storyLLMId: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  <option value="">-- 选择 API Key --</option>
+                  <option value="">{t('admin.selectApiKey')}</option>
                   {keys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
                 </select>
-                <p className="text-xs text-gray-400 mt-1.5">用于生成故事文字 + 图片描述</p>
+                <p className="text-xs text-gray-400 mt-1.5">{t('admin.storyModelHint')}</p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">绘本图片模型</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.pictureModel')}</label>
                 <select value={llm.pictureLLMId} onChange={(e) => setLlm({ ...llm, pictureLLMId: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  <option value="">-- 选择 API Key --</option>
+                  <option value="">{t('admin.selectApiKey')}</option>
                   {imageGenKeys.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.model || k.provider})</option>)}
                 </select>
-                <p className="text-xs text-gray-400 mt-1.5">用于生成绘本插画（如 qwen-image-edit-plus）</p>
+                <p className="text-xs text-gray-400 mt-1.5">{t('admin.pictureModelHint')}</p>
               </div>
             </div>
 
@@ -271,33 +274,33 @@ export default function AdminPage({
             <div>
               <div className="mb-4">
                 <button onClick={openAddKey} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-                  添加 API Key
+                  {t('admin.addApiKey')}
                 </button>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      {['名称', '提供商', '模型', '图像生成', '操作'].map((h) => (
+                      {[t('admin.colName'), t('admin.colProvider'), t('admin.colModel'), t('admin.colImageGen'), t('admin.colActions')].map((h) => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {keys.length === 0 ? (
-                      <tr><td colSpan={5} className="text-center py-12 text-gray-400 text-sm">暂无 API Key，点击上方按钮添加</td></tr>
+                      <tr><td colSpan={5} className="text-center py-12 text-gray-400 text-sm">{t('admin.noKeys')}</td></tr>
                     ) : keys.map((k) => (
                         <tr key={k.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 font-medium text-gray-800">{k.name}</td>
                           <td className="px-4 py-3 text-gray-600">{k.provider || '—'}</td>
                           <td className="px-4 py-3 text-gray-600">{k.model || '—'}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-xs font-medium ${k.supportsImageGen ? 'text-green-500' : 'text-gray-400'}`}>{k.supportsImageGen ? '支持' : '不支持'}</span>
+                            <span className={`text-xs font-medium ${k.supportsImageGen ? 'text-green-500' : 'text-gray-400'}`}>{k.supportsImageGen ? t('admin.imageGenYes') : t('admin.imageGenNo')}</span>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
-                              <button onClick={() => openEditKey(k)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">编辑</button>
-                              <button onClick={() => handleDeleteKey(k.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">删除</button>
+                              <button onClick={() => openEditKey(k)} className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors">{t('admin.edit')}</button>
+                              <button onClick={() => handleDeleteKey(k.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">{t('admin.delete')}</button>
                             </div>
                           </td>
                         </tr>
@@ -312,18 +315,18 @@ export default function AdminPage({
 
           {adminTab === 'tts' && (
           <div className="space-y-5">
-            <p className="text-xs text-gray-400">在此选择朗读时使用的语音，选择会立即生效。语音列表由浏览器提供。</p>
+            <p className="text-xs text-gray-400">{t('admin.ttsHint')}</p>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">中文语音</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.zhVoice')}</label>
                 {zhVoices.length === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">未检测到中文语音</p>
+                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">{t('admin.noZhVoice')}</p>
                 ) : (
                   <div className="flex gap-2">
                     <select value={selectedZhVoice}
                       onChange={(e) => { setSelectedZhVoice(e.target.value); localStorage.setItem('wstory_zh_voice', e.target.value) }}
                       className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                      <option value="">-- 使用默认 --</option>
+                      <option value="">{t('admin.defaultVoice')}</option>
                       {zhVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
                     </select>
                     <button type="button" onClick={() => {
@@ -335,21 +338,21 @@ export default function AdminPage({
                         speechSynthesis.speak(utt)
                       }, 100)
                     }} className="flex-shrink-0 border border-purple-200 text-purple-600 hover:bg-purple-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap">
-                      ▶ 测试语音
+                      {t('admin.testVoice')}
                     </button>
                   </div>
                 )}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">英文语音</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.enVoice')}</label>
                 {enVoices.length === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">未检测到英文语音</p>
+                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">{t('admin.noEnVoice')}</p>
                 ) : (
                   <div className="flex gap-2">
                     <select value={selectedEnVoice}
                       onChange={(e) => { setSelectedEnVoice(e.target.value); localStorage.setItem('wstory_en_voice', e.target.value) }}
                       className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                      <option value="">-- 使用默认 --</option>
+                      <option value="">{t('admin.defaultVoice')}</option>
                       {enVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
                     </select>
                     <button type="button" onClick={() => {
@@ -361,7 +364,7 @@ export default function AdminPage({
                         speechSynthesis.speak(utt)
                       }, 100)
                     }} className="flex-shrink-0 border border-blue-200 text-blue-600 hover:bg-blue-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap">
-                      ▶ 测试语音
+                      {t('admin.testVoice')}
                     </button>
                   </div>
                 )}
@@ -376,11 +379,11 @@ export default function AdminPage({
 
         <footer className="flex-shrink-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
           <button type="button" onClick={onClose} className="border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium py-2.5 px-5 rounded-xl transition-colors text-sm">
-            取消
+            {t('admin.cancel')}
           </button>
           <button type="button" onClick={handlePersistConfig} disabled={llmSaving || !dirty}
             className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-6 rounded-xl transition-colors text-sm">
-            {llmSaving ? '保存中...' : '保存设置'}
+            {llmSaving ? t('admin.saving') : t('admin.saveBtn')}
           </button>
         </footer>
 
@@ -389,12 +392,12 @@ export default function AdminPage({
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h3 className="font-bold text-gray-800">{editingKey ? '编辑 API 密钥' : '添加 API 密钥'}</h3>
+                <h3 className="font-bold text-gray-800">{editingKey ? t('admin.keyTitleEdit') : t('admin.keyTitleAdd')}</h3>
                 <button onClick={closeKeyModal} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
               </div>
               <form onSubmit={handleKeySubmit} className="px-6 py-5 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">大模型提供商</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t('admin.keyProvider')}</label>
                   <select value={form.provider}
                     onChange={(e) => {
                       const preset = PROVIDER_PRESETS.find((p) => p.provider === e.target.value)
@@ -403,29 +406,29 @@ export default function AdminPage({
                     }}
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
                     {PROVIDER_PRESETS.map((p) => (
-                      <option key={p.label} value={p.provider}>{p.label}</option>
+                      <option key={p.labelKey} value={p.provider}>{t(p.labelKey)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">名称 <span className="text-red-400">*</span></label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t('admin.keyName')} <span className="text-red-400">*</span></label>
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 我的 GPT-4o"
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" required />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">模型</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t('admin.keyModel')}</label>
                   <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder="e.g. gpt-4o"
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">服务地址</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{t('admin.keyBaseURL')}</label>
                   <input value={form.baseURL} onChange={(e) => setForm({ ...form, baseURL: e.target.value })} placeholder="https://api.openai.com/v1"
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    API 密钥
-                    {editingKey && !isDraftKeyId(editingKey.id) && <span className="ml-1 font-normal text-gray-400">（留空则保留原值）</span>}
+                    {t('admin.keySecret')}
+                    {editingKey && !isDraftKeyId(editingKey.id) && <span className="ml-1 font-normal text-gray-400">{t('admin.keySecretHint')}</span>}
                   </label>
                   <input type="password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="sk-..."
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
@@ -433,12 +436,12 @@ export default function AdminPage({
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={form.supportsImageGen} onChange={(e) => setForm({ ...form, supportsImageGen: e.target.checked })}
                     className="w-4 h-4 rounded text-purple-600 focus:ring-purple-300" />
-                  <span className="text-sm text-gray-700">支持图像生成</span>
+                  <span className="text-sm text-gray-700">{t('admin.keyImageGen')}</span>
                 </label>
                 <div className="flex gap-3 pt-1">
-                  <button type="button" onClick={closeKeyModal} className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl text-sm hover:bg-gray-50 transition-colors">取消</button>
+                  <button type="button" onClick={closeKeyModal} className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl text-sm hover:bg-gray-50 transition-colors">{t('admin.cancel')}</button>
                   <button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-                    确定
+                    {t('admin.ok')}
                   </button>
                 </div>
               </form>

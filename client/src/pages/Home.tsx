@@ -1,20 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { BookItem, DropdownOptions, Guide, Story, APIKeyView, LLMSettings } from '@/types'
 import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
+import { useI18n } from '../i18n'
+import '../i18n/locales'
 import AdminPage from './Admin'
 
 // ── Illustration styles ──
 
-export const ILLUSTRATION_STYLES: { id: string; name: string }[] = [
-  { id: 'watercolor',   name: '清新水彩' },
-  { id: 'kawaii',       name: '可爱治愈' },
-  { id: 'flat',         name: '简约扁平' },
-  { id: 'cartoon',      name: '卡通夸张' },
-  { id: 'vintage',      name: '复古经典' },
-  { id: 'chinese',      name: '国风水墨' },
-  { id: 'collage',      name: '拼贴手工' },
-  { id: 'realistic',    name: '写实细腻' },
-  { id: 'printmaking',  name: '版画装饰' },
+// Style names are resolved via t() at render time; this array provides id→key mapping
+export const ILLUSTRATION_STYLES: { id: string; nameKey: string }[] = [
+  { id: 'watercolor',   nameKey: 'style.watercolor' },
+  { id: 'kawaii',       nameKey: 'style.kawaii' },
+  { id: 'flat',         nameKey: 'style.flat' },
+  { id: 'cartoon',      nameKey: 'style.cartoon' },
+  { id: 'vintage',      nameKey: 'style.vintage' },
+  { id: 'chinese',      nameKey: 'style.chinese' },
+  { id: 'collage',      nameKey: 'style.collage' },
+  { id: 'realistic',    nameKey: 'style.realistic' },
+  { id: 'printmaking',  nameKey: 'style.printmaking' },
 ]
 
 const DEFAULT_STYLE_ID = 'watercolor'
@@ -45,14 +48,22 @@ function getBedtimeCover(theme?: string) {
   return { colors: ['#1e1b4b', '#312e81'] as [string, string], emoji }
 }
 
+// Helper to translate book fields (emotion, scene, theme)
+function translateBookField(field: string, type: 'emotion' | 'scene' | 'theme', t: (key: string) => string): string {
+  return t(`${type}.${field}`)
+}
+
 // ── EditableSelect ──
 
 function EditableSelect({
   value, options, placeholder, onChange, onAdd, onDelete,
+  translateKey,
 }: {
   value: string; options: string[]; placeholder: string
   onChange: (v: string) => void; onAdd: (v: string) => void; onDelete: (v: string) => void
+  translateKey?: 'emotion' | 'scene' | 'theme'
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [newVal, setNewVal] = useState('')
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -69,11 +80,17 @@ function EditableSelect({
     }
   }, [open])
 
+  // Helper to translate option values
+  const translateOption = (option: string): string => {
+    if (!translateKey) return option
+    return t(`${translateKey}.${option}`)
+  }
+
   return (
     <div ref={wrapperRef} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3 bg-white hover:border-purple-300 transition-colors text-sm focus:outline-none focus:ring-2 focus:ring-purple-300">
-        <span className={value ? 'text-gray-800' : 'text-gray-400'}>{value || placeholder}</span>
+        <span className={value ? 'text-gray-800' : 'text-gray-400'}>{value ? translateOption(value) : placeholder}</span>
         <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -82,12 +99,12 @@ function EditableSelect({
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-56 flex flex-col">
             <div className="overflow-y-auto">
               {(!options || options.length === 0) ? (
-                <p className="text-center text-gray-400 text-xs py-4">暂无选项</p>
+                <p className="text-center text-gray-400 text-xs py-4">{t('create.noOptions')}</p>
               ) : options.map((opt) => (
                 <div key={opt} className="flex items-center group hover:bg-gray-50">
                   <button type="button" onClick={() => { onChange(opt); setOpen(false) }}
                     className={`flex-1 text-left px-4 py-2.5 text-sm ${opt === value ? 'text-purple-600 font-medium bg-purple-50' : 'text-gray-700'}`}>
-                    {opt}
+                    {translateOption(opt)}
                   </button>
                   <button type="button" onClick={() => onDelete(opt)}
                     className="opacity-0 group-hover:opacity-100 px-3 py-2 text-red-400 hover:text-red-600 text-sm transition-opacity" title="删除">
@@ -99,11 +116,11 @@ function EditableSelect({
             <div className="border-t border-gray-100 p-2 flex gap-2">
               <input value={newVal} onChange={(e) => setNewVal(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && newVal.trim()) { onAdd(newVal.trim()); setNewVal('') } }}
-                placeholder="新增选项..." onClick={(e) => e.stopPropagation()}
+                placeholder={t('create.addOption')} onClick={(e) => e.stopPropagation()}
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-300" />
               <button type="button" onClick={() => { if (newVal.trim()) { onAdd(newVal.trim()); setNewVal('') } }}
                 className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                添加
+                {t('create.add')}
               </button>
             </div>
           </div>
@@ -115,6 +132,7 @@ function EditableSelect({
 // ── GuideModal ──
 
 function GuideModal({ book, lang, onClose }: { book: BookItem; lang: 'zh' | 'en'; onClose: () => void }) {
+  const { t } = useI18n()
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
   const useEn = lang === 'en'
@@ -127,8 +145,8 @@ function GuideModal({ book, lang, onClose }: { book: BookItem; lang: 'zh' | 'en'
           <div className="flex items-center gap-3">
             <span className="text-2xl">{cover.emoji}</span>
             <div>
-              <h3 className="font-bold text-gray-800">{useEn ? 'A Note for Parents' : '给家长的话'}</h3>
-              <p className="text-xs text-gray-400">{useEn ? "Understanding your child's emotions" : '理解孩子的情绪'}</p>
+              <h3 className="font-bold text-gray-800">{t('guide.title')}</h3>
+              <p className="text-xs text-gray-400">{t('guide.subtitle')}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
@@ -156,12 +174,14 @@ type ReaderPage =
   | { type: 'guide' }
   | { type: 'story'; pageNumber: number; text: string; textEn?: string; imagePrompt?: string }
 
-function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void }) {
+function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void; uiLocale: 'zh' | 'en' }) {
+  const { t } = useI18n()
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
 
   const pages: ReaderPage[] = [
     { type: 'cover' },
+    { type: 'guide' },
     ...[...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p) => ({
       type: 'story' as const,
       pageNumber: p.pageNumber,
@@ -174,7 +194,11 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
 
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const defaultVoiceLang = (tl?: string): 'zh' | 'en' | 'off' => tl === 'en' ? 'en' : 'zh'
+  const defaultVoiceLang = (tl?: string): 'zh' | 'en' | 'off' => {
+    if (tl === 'en') return 'en'
+    if (uiLocale === 'en') return 'en'
+    return 'zh'
+  }
   const [voiceLang, setVoiceLang] = useState<'zh' | 'en' | 'off'>(() => defaultVoiceLang(book.textLang))
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [guideOpen, setGuideOpen] = useState(false)
@@ -187,17 +211,17 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
   }, [voiceLang])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Reset when book changes
+  // Reset when book changes or UI locale changes
   useEffect(() => {
     setIdx(0); setPlaying(false); speechSynthesis.cancel()
     setVoiceLang(defaultVoiceLang(book.textLang))
     setVoiceEnabled(true)
     setCoverImageFailed(false)
-  }, [book.id])
+  }, [book.id, uiLocale])
 
   const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {
     if (!voiceEnabled || voiceLang === 'off') return null
-    if (p.type === 'cover') return null  // 封面不朗读
+    if (p.type === 'cover' || p.type === 'guide') return null  // 封面/引导不朗读
     const getStoredVoice = (lang: 'zh' | 'en') => {
       const all = speechSynthesis.getVoices()
       const name = localStorage.getItem(lang === 'zh' ? 'wstory_zh_voice' : 'wstory_en_voice')
@@ -270,7 +294,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
             {!coverImageFailed && (
               <img
                 src={`/api/books/${book.id}/images/0`}
-                alt="封面插画"
+                alt={t('reader.coverAlt')}
                 className="w-full rounded-3xl shadow-2xl object-cover"
                 style={{ aspectRatio: '3/4' }}
                 onError={() => setCoverImageFailed(true)}
@@ -292,8 +316,8 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
                   <div className="relative">
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {(isBedtime
-                        ? [book.theme || '睡前故事', `${book.ageGroup}岁`]
-                        : [book.emotion, book.scene, `${book.ageGroup}岁`]
+                        ? [book.theme ? translateBookField(book.theme, 'theme', t) : t('home.bedtimeStory'), t('common.ageUnit', { age: book.ageGroup })]
+                        : [translateBookField(book.emotion, 'emotion', t), translateBookField(book.scene, 'scene', t), t('common.ageUnit', { age: book.ageGroup })]
                       ).map((tag) => (
                         <span key={tag} className="bg-white/20 text-white/90 text-xs px-2.5 py-0.5 rounded-full">{tag}</span>
                       ))}
@@ -320,7 +344,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
             <div className="relative rounded-2xl overflow-hidden shadow-lg" style={{ width: '100%', aspectRatio: '1/1' }}>
               <img
                 src={`/api/books/${book.id}/images/${cur.pageNumber}`}
-                alt={`第${cur.pageNumber}页插画`}
+                alt={t('reader.pageAlt', { n: cur.pageNumber })}
                 className="w-full h-full object-cover"
                 onLoad={() => setImageLoaded((prev) => ({ ...prev, [cur.pageNumber]: true }))}
                 onError={(e) => {
@@ -354,7 +378,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
           {/* Guide button - leftmost */}
           <button onClick={() => setGuideOpen(true)}
             className="flex-shrink-0 px-2.5 h-9 flex items-center justify-center rounded-xl border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all text-xs font-medium whitespace-nowrap">
-            💛 给家长的话
+            {t('reader.parentNote')}
           </button>
 
           {/* Page dots */}
@@ -368,7 +392,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
           {/* To start */}
           <button onClick={() => goTo(0)} disabled={idx === 0}
             className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            title="回到开始">
+            title={t('reader.toStart')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
             </svg>
@@ -385,7 +409,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
           {/* Auto-play toggle */}
           <button onClick={() => setPlaying((p) => !p)}
             className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border transition-all ${playing ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 text-gray-500 hover:text-purple-600 hover:border-purple-300'}`}
-            title={playing ? '暂停' : '自动播放'}>
+            title={playing ? t('reader.pause') : t('reader.play')}>
             {playing ? (
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" />
@@ -408,7 +432,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
           {/* To end */}
           <button onClick={() => goTo(total - 1)} disabled={idx === total - 1}
             className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            title="跳到结尾">
+            title={t('reader.toEnd')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M6 5l7 7-7 7" />
             </svg>
@@ -417,7 +441,7 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
           {/* Voice enable/disable (master mute) */}
           <button onClick={() => setVoiceEnabled((e) => !e)}
             className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl border transition-all ${voiceEnabled ? 'bg-green-50 border-green-300 text-green-600' : 'border-gray-200 text-gray-300 hover:text-gray-400'}`}
-            title={voiceEnabled ? '关闭朗读' : '开启朗读'}>
+            title={voiceEnabled ? t('reader.muteOn') : t('reader.muteOff')}>
             {voiceEnabled ? (
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
             ) : (
@@ -428,15 +452,19 @@ function BookReader({ book, onDisplayLangChange }: { book: BookItem; onDisplayLa
           {/* 中|英 segmented language selector */}
           <div className={`flex-shrink-0 flex border border-gray-200 rounded-xl overflow-hidden transition-opacity ${!voiceEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
             <button onClick={() => setVoiceLang('zh')}
-              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'zh' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>中</button>
+              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'zh' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>
+              {uiLocale === 'zh' ? '中' : 'CH'}
+            </button>
             <div className="w-px bg-gray-200" />
             <button onClick={() => setVoiceLang('en')}
-              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'en' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>英</button>
+              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'en' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>
+              {uiLocale === 'zh' ? '英' : 'EN'}
+            </button>
           </div>
 
           {/* Page label */}
           <span className="text-xs text-gray-400 text-right flex-shrink-0" style={{ width: '48px' }}>
-            {idx === 0 ? '封面' : `${idx}/${total - 1}`}
+            {idx === 0 ? t('reader.cover') : `${idx}/${total - 1}`}
           </span>
         </div>
       </div>
@@ -454,19 +482,21 @@ const DEFAULT_OPTIONS: DropdownOptions = {
   themes: ['动物朋友', '太空冒险', '海底世界', '森林精灵', '魔法王国', '小镇日常', '恐龙乐园', '云朵王国', '小火车', '四季变换', '彩虹仙境', '夜晚星空', '农场生活', '城市探索', '冰雪世界'],
 }
 
-function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
+function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displayLang }: {
   open: boolean; onClose: () => void; options: DropdownOptions
   onOptionsChange: (o: DropdownOptions) => void; onCreated: (book: BookItem) => void
+  displayLang: 'zh' | 'en'
 }) {
+  const { t } = useI18n()
   const [emotion, setEmotion] = useState('')
   const [scene, setScene] = useState('')
   const [ageGroup, setAgeGroup] = useState('6')
   const [description, setDescription] = useState('')
-  const [protagonistPreset, setProtagonistPreset] = useState('自动')
+  const [protagonistPreset, setProtagonistPreset] = useState('protagonist.auto')
   const [mode, setMode] = useState<'emotion' | 'bedtime'>('emotion')
   const [theme, setTheme] = useState('')
   const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID)
-  const textLang: 'zh' | 'en' | 'bilingual' = 'bilingual'
+  const textLang: 'zh' | 'en' | 'bilingual' = displayLang === 'en' ? 'en' : 'bilingual'
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -487,24 +517,24 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
     if (type === 'themes' && theme === value) setTheme('')
   }
   const handleGenerate = async () => {
-    if (mode === 'emotion' && (!emotion || !scene || !ageGroup)) { setError('请选择情绪、场景和年龄段'); return }
-    if (mode === 'bedtime' && !ageGroup) { setError('请输入孩子年龄'); return }
+    if (mode === 'emotion' && (!emotion || !scene || !ageGroup)) { setError(t('create.error.selectFields')); return }
+    if (mode === 'bedtime' && !ageGroup) { setError(t('create.error.enterAge')); return }
     // Check LLM configuration first
     const statusRes = await fetch('/api/llm-status')
     const { hasStoryLLM, hasPictureLLM }: { hasStoryLLM: boolean; hasPictureLLM: boolean } = await statusRes.json()
     if (!hasStoryLLM && !hasPictureLLM) {
-      setError('请先在管理后台配置故事和绘本 LLM')
+      setError(t('create.error.configureLlm'))
       return
     }
     if (!hasStoryLLM) {
-      setError('请先在管理后台配置故事 LLM')
+      setError(t('create.error.configureStoryLlm'))
       return
     }
     setError(null); setGenerating(true)
     const input = { emotion, scene, ageGroup, description, protagonistPreset, mode, theme, textLang }
     try {
       // Guide (background step, no numbered display)
-      setGenStep(mode === 'bedtime' ? '准备睡前小贴士...' : '正在分析情绪...')
+      setGenStep(mode === 'bedtime' ? t('create.step.preparingGuide') : t('create.step.analyzingEmotion'))
       console.log('[generate] 开始生成引导建议')
       const guideRes = await fetch('/api/trouble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
       if (!guideRes.ok) throw new Error((await guideRes.json()).error)
@@ -512,10 +542,10 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       console.log('[generate] 引导建议完成')
 
       // ① 正在构建故事角色... → ② 正在创作专属故事... (timer, same LLM call)
-      setGenStep('正在构建故事角色...')
+      setGenStep(t('create.step.buildingCharacters'))
       console.log('[generate] ① 正在构建故事角色...')
       const storyStepTimer = setTimeout(() => {
-        setGenStep(mode === 'bedtime' ? '正在创作睡前故事...' : '正在创作专属故事...')
+        setGenStep(mode === 'bedtime' ? t('create.step.creatingBedtimeStory') : t('create.step.creatingStory'))
         console.log('[generate] ② 正在创作专属故事...')
       }, 6000)
       const storyRes = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
@@ -527,7 +557,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       console.log(`[generate] 故事+角色完成: ${story.pages?.length} 页, ${characters.length} 个角色`)
 
       // ③ 正在生成故事内容（翻译 + 插画描述）...
-      setGenStep('正在生成故事内容 ...')
+      setGenStep(t('create.step.generatingContent'))
       console.log('[generate] ③ 正在生成故事内容 ...')
       const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang, illustrationStyleId: styleId }) })
       if (!transRes.ok) throw new Error((await transRes.json()).error)
@@ -539,7 +569,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
       )
 
       // ⑥ 正在保存...
-      setGenStep('正在保存...')
+      setGenStep(t('create.step.saving'))
       console.log('[generate] ⑥ 正在保存...')
       const saveBody = { ...input, guide, story, characters, illustrationStyleId: styleId }
       const saveRes = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saveBody) })
@@ -552,7 +582,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 
       if (hasPictureLLM && hasIllustrationPrompts) {
         // ④ 正在绘制角色定妆图...
-        setGenStep('正在绘制角色定妆图...')
+        setGenStep(t('create.step.drawingRefs'))
         console.log('[generate] ④ 正在绘制角色定妆图...')
         await fetch('/api/qwen-image/gen-refs', {
           method: 'POST',
@@ -569,7 +599,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
         let donePages = 0
 
         if (hasCover) {
-          setGenStep('正在生成封面插图...')
+          setGenStep(t('create.step.generatingCover'))
           console.log('[generate] ⑤ 生成封面插图')
           await fetch('/api/qwen-image/generate', {
             method: 'POST',
@@ -580,7 +610,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 
         for (const page of pagesToDraw) {
           donePages++
-          setGenStep(`正在生成绘本插图（第 ${donePages}/${totalPages} 页）...`)
+          setGenStep(t('create.step.generatingPage', { done: donePages, total: totalPages }))
           console.log(`[generate] ⑤ 生成第 ${page.pageNumber} 页插图 (${donePages}/${totalPages})`)
           await fetch('/api/qwen-image/generate', {
             method: 'POST',
@@ -593,7 +623,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 
       onCreated(book); onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '生成失败，请重试')
+      setError(err instanceof Error ? err.message : t('create.error.generateFailed'))
     } finally { setGenerating(false); setGenStep('') }
   }
 
@@ -602,7 +632,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="relative bg-white rounded-2xl shadow-2xl flex flex-col" style={{ width: '520px' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h3 className="font-bold text-gray-800 text-lg">创作新绘本</h3>
+          <h3 className="font-bold text-gray-800 text-lg">{t('create.title')}</h3>
           {!generating && (
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-xl leading-none">×</button>
           )}
@@ -612,11 +642,11 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
           <div className="flex border-b border-gray-100 flex-shrink-0">
             <button onClick={() => { setMode('emotion'); setError(null) }}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mode === 'emotion' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-400 hover:text-gray-600'}`}>
-              😢 情绪故事
+              😢 {t('create.emotionMode')}
             </button>
             <button onClick={() => { setMode('bedtime'); setError(null) }}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mode === 'bedtime' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}>
-              🌙 睡前故事
+              🌙 {t('create.bedtimeMode')}
             </button>
           </div>
         )}
@@ -633,33 +663,35 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
             {mode === 'emotion' && (<>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.ageLabel')} <span className="text-red-400">*</span></label>
                   <input type="number" min={2} max={14} value={ageGroup}
                     onChange={(e) => { setAgeGroup(e.target.value); localStorage.setItem('wstory_age_group', e.target.value) }} placeholder="2-14"
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">孩子的情绪 <span className="text-red-400">*</span></label>
-                  <EditableSelect value={emotion} options={options.emotions} placeholder="选择情绪..." onChange={setEmotion}
-                    onAdd={(v) => handleAdd('emotions', v)} onDelete={(v) => handleDelete('emotions', v)} />
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.emotionLabel')} <span className="text-red-400">*</span></label>
+                  <EditableSelect value={emotion} options={options.emotions} placeholder={t('create.emotionPlaceholder')} onChange={setEmotion}
+                    onAdd={(v) => handleAdd('emotions', v)} onDelete={(v) => handleDelete('emotions', v)}
+                    translateKey="emotion" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">发生场景 <span className="text-red-400">*</span></label>
-                  <EditableSelect value={scene} options={options.scenes} placeholder="选择场景..." onChange={setScene}
-                    onAdd={(v) => handleAdd('scenes', v)} onDelete={(v) => handleDelete('scenes', v)} />
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.sceneLabel')} <span className="text-red-400">*</span></label>
+                  <EditableSelect value={scene} options={options.scenes} placeholder={t('create.scenePlaceholder')} onChange={setScene}
+                    onAdd={(v) => handleAdd('scenes', v)} onDelete={(v) => handleDelete('scenes', v)}
+                    translateKey="scene" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">插画风格<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.styleLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
                   <select value={styleId} onChange={(e) => { setStyleId(e.target.value); localStorage.setItem('wstory_style_id', e.target.value) }}
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                    {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">主角选择<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.protagonistLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
                 <select
                   value={protagonistPreset}
                   onChange={(e) => {
@@ -670,14 +702,14 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white"
                 >
                   {PROTAGONIST_PRESET_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
+                    <option key={opt} value={opt}>{t(opt)}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">具体描述<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.descLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                  placeholder="描述孩子的具体情况，帮助生成更贴心的故事..."
+                  placeholder={t('create.descPlaceholder')}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
               </div>
             </>)}
@@ -686,26 +718,27 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
             {mode === 'bedtime' && (<>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">孩子年龄(岁) <span className="text-red-400">*</span></label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.ageLabel')} <span className="text-red-400">*</span></label>
                   <input type="number" min={2} max={14} value={ageGroup}
                     onChange={(e) => { setAgeGroup(e.target.value); localStorage.setItem('wstory_age_group', e.target.value) }} placeholder="2-14"
                     className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">故事主题<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
-                  <EditableSelect value={theme} options={options.themes} placeholder="选择或输入主题..." onChange={setTheme}
-                    onAdd={(v) => handleAdd('themes', v)} onDelete={(v) => handleDelete('themes', v)} />
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.themeLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
+                  <EditableSelect value={theme} options={options.themes} placeholder={t('create.themePlaceholder')} onChange={setTheme}
+                    onAdd={(v) => handleAdd('themes', v)} onDelete={(v) => handleDelete('themes', v)}
+                    translateKey="theme" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">插画风格<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.styleLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
                 <select value={styleId} onChange={(e) => { setStyleId(e.target.value); localStorage.setItem('wstory_style_id', e.target.value) }}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                  {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {ILLUSTRATION_STYLES.map((s) => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">主角选择<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.protagonistLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
                 <select
                   value={protagonistPreset}
                   onChange={(e) => {
@@ -716,25 +749,25 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                 >
                   {PROTAGONIST_PRESET_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
+                    <option key={opt} value={opt}>{t(opt)}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">额外想法<span className="ml-1 text-xs text-gray-400 font-normal">（可选）</span></label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('create.extraLabel')}<span className="ml-1 text-xs text-gray-400 font-normal">{t('create.styleOptional')}</span></label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                  placeholder="孩子喜欢的角色、特别的元素…"
+                  placeholder={t('create.extraPlaceholder')}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" rows={3} />
               </div>
             </>)}
 
 
             <div className="flex gap-3 pt-1">
-              <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-medium py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm">取消</button>
+              <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 font-medium py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm">{t('create.cancel')}</button>
               <button onClick={handleGenerate}
                 disabled={mode === 'emotion' ? (!emotion || !scene || !ageGroup) : !ageGroup}
                 className={`flex-1 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors ${mode === 'bedtime' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-purple-600 hover:bg-purple-700'}`}>
-                开始创作
+                {t('create.start')}
               </button>
             </div>
           </div>
@@ -748,6 +781,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated }: {
 // ── HomePage ──
 
 export default function HomePage() {
+  const { t, locale, setLocale } = useI18n()
   const [books, setBooks] = useState<BookItem[]>([])
   const [selectedBook, setSelectedBook] = useState<BookItem | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -766,7 +800,7 @@ export default function HomePage() {
       if (data.length > 0) setSelectedBook(data[0])
       setLoading(false)
     })
-    fetch('/api/options').then((r) => (r.ok ? r.json() : {})).then((data) => {
+    fetch('/api/options').then((r) => (r.ok ? r.json() : {})).then((data: Partial<DropdownOptions>) => {
       setOptions({
         emotions: data.emotions ?? DEFAULT_OPTIONS.emotions,
         scenes: data.scenes ?? DEFAULT_OPTIONS.scenes,
@@ -813,7 +847,7 @@ export default function HomePage() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm('确认删除这本绘本？')) return
+    if (!confirm(t('home.confirmDelete'))) return
     const res = await fetch(`/api/books/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setBooks((prev) => {
@@ -829,26 +863,36 @@ export default function HomePage() {
       <aside className="w-72 bg-white border-r border-gray-100 flex flex-col flex-shrink-0">
         <div className="px-4 py-4 border-b border-gray-100">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="font-bold text-gray-800">童心事·绘本</h1>
-            <button
-              type="button"
-              onClick={() => { void openAdminSettings() }}
-              disabled={adminPrefetching}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              title="系统设置"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
+            <h1 className="font-bold text-gray-800">{t('home.appTitle')}</h1>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors text-xs font-bold"
+                title={locale === 'zh' ? 'Switch to English' : '切换为中文'}
+              >
+                {locale === 'zh' ? 'EN' : '中'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { void openAdminSettings() }}
+                disabled={adminPrefetching}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                title={t('home.settings')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
           </div>
           <button onClick={openCreateModal}
             className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2.5 rounded-xl transition-colors text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
             </svg>
-            创作新绘本
+            {t('home.createNew')}
           </button>
         </div>
         <div className="flex-1 overflow-y-auto py-2">
@@ -859,19 +903,20 @@ export default function HomePage() {
           ) : books.length === 0 ? (
             <div className="text-center py-10 px-5">
               <div className="text-3xl mb-3">📚</div>
-              <p className="text-gray-400 text-sm">还没有绘本</p>
-              <p className="text-gray-400 text-xs mt-1">点击上方按钮创作第一本</p>
+              <p className="text-gray-400 text-sm">{t('home.noBooks')}</p>
+              <p className="text-gray-400 text-xs mt-1">{t('home.noBooksHint')}</p>
             </div>
           ) : books.map((book) => {
             const c = book.mode === 'bedtime' ? getBedtimeCover(book.theme) : getCover(book.emotion)
             const isSelected = selectedBook?.id === book.id
-            const styleName =
-              ILLUSTRATION_STYLES.find((s) => s.id === (book.illustrationStyleId ?? 'watercolor'))?.name ?? '清新水彩'
+            const styleKey =
+              ILLUSTRATION_STYLES.find((s) => s.id === (book.illustrationStyleId ?? 'watercolor'))?.nameKey ?? 'style.watercolor'
+            const styleName = t(styleKey)
             const dateLabel = new Date(book.createdAt).toLocaleDateString('zh-CN')
             const metaLine1 =
               book.mode === 'bedtime'
-                ? `🌙 ${book.theme || '睡前故事'} · ${styleName}`
-                : `💛 ${book.emotion} · ${styleName}`
+                ? `🌙 ${book.theme ? translateBookField(book.theme, 'theme', t) : t('home.bedtimeStory')} · ${styleName}`
+                : `💛 ${translateBookField(book.emotion, 'emotion', t)} · ${styleName}`
             return (
               <div key={book.id} onClick={() => setSelectedBook(book)}
                 className={`mx-2 my-0.5 px-3 py-3 rounded-xl cursor-pointer group flex items-center gap-3 transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}>
@@ -903,7 +948,7 @@ export default function HomePage() {
                         <p className={`text-sm font-medium truncate ${isSelected ? 'text-purple-700' : 'text-gray-800'}`}>{displayTitle}</p>
                       </div>
                       <p className={`text-xs mt-0.5 truncate ${isSelected ? 'text-purple-600/80' : 'text-gray-400'}`}>{metaLine1}</p>
-                      <p className={`text-xs pl-4 mt-0.5 ${isSelected ? 'text-purple-600/70' : 'text-gray-400'}`}>{book.ageGroup}岁 · {dateLabel}</p>
+                      <p className={`text-xs pl-4 mt-0.5 ${isSelected ? 'text-purple-600/70' : 'text-gray-400'}`}>{t('common.ageUnit', { age: book.ageGroup })} · {dateLabel}</p>
                     </>)
                   })()}
                 </div>
@@ -921,15 +966,15 @@ export default function HomePage() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="text-6xl mb-4">📖</div>
-              <h2 className="text-xl font-bold text-gray-700 mb-2">童心事·绘本</h2>
-              <p className="text-gray-400 text-sm mb-6">用一个故事，陪孩子走过每一种情绪</p>
+              <h2 className="text-xl font-bold text-gray-700 mb-2">{t('home.appTitle')}</h2>
+              <p className="text-gray-400 text-sm mb-6">{t('home.subtitle')}</p>
               <button onClick={openCreateModal} className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-3 rounded-xl transition-colors text-sm">
-                创作第一本绘本
+                {t('home.createFirst')}
               </button>
             </div>
           </div>
         ) : (
-          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} />
+          <BookReader book={selectedBook} onDisplayLangChange={setDisplayLang} uiLocale={locale} />
         )}
       </main>
       {createOpen && (
@@ -940,6 +985,7 @@ export default function HomePage() {
           options={options}
           onOptionsChange={setOptions}
           onCreated={handleCreated}
+          displayLang={locale === 'en' ? 'en' : 'zh'}
         />
       )}
       {adminOpen && adminBootstrap && (

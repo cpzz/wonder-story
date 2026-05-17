@@ -73,6 +73,8 @@ const homeZh = {
   'create.error.configureLlm': '请先在管理后台配置故事和绘本 LLM',
   'create.error.configureStoryLlm': '请先在管理后台配置故事 LLM',
   'create.error.generateFailed': '生成失败，请重试',
+  'create.warning.imageGenerationFailed': '⚠️ 部分插图生成失败',
+  'create.warning.imageFailedHint': '请检查管理后台的图片模型配置',
 
   // Create Modal - Options
   'create.noOptions': '暂无选项',
@@ -220,6 +222,8 @@ const homeEn = {
   'create.error.configureLlm': 'Please configure Story and Illustration LLM in Settings first',
   'create.error.configureStoryLlm': 'Please configure Story LLM in Settings first',
   'create.error.generateFailed': 'Generation failed, please try again',
+  'create.warning.imageGenerationFailed': '⚠️ Some illustrations failed to generate',
+  'create.warning.imageFailedHint': 'Please check the image model settings',
 
   'create.noOptions': 'No options',
   'create.addOption': 'Add option...',

@@ -496,10 +496,11 @@ const DEFAULT_OPTIONS: DropdownOptions = {
   themes: ['动物朋友', '太空冒险', '海底世界', '森林精灵', '魔法王国', '小镇日常', '恐龙乐园', '云朵王国', '小火车', '四季变换', '彩虹仙境', '夜晚星空', '农场生活', '城市探索', '冰雪世界'],
 }
 
-function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displayLang }: {
-  open: boolean; onClose: () => void; options: DropdownOptions
-  onOptionsChange: (o: DropdownOptions) => void; onCreated: (book: BookItem) => void
-  displayLang: 'zh' | 'en'
+function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreated, displayLang, locale, onWarning }: {
+  open: boolean; hidden?: boolean; onClose: () => void; options: DropdownOptions;
+  onOptionsChange: (o: DropdownOptions) => void; onCreated: (b: BookItem) => void;
+  displayLang: 'zh' | 'en'; locale: 'zh' | 'en';
+  onWarning?: (title: string, statusCode?: number) => void;
 }) {
   const { t } = useI18n()
   const [emotion, setEmotion] = useState('')
@@ -519,6 +520,23 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
   const persistOptions = (updated: DropdownOptions) => {
     onOptionsChange(updated)
     fetch('/api/options', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+  }
+
+  // Parse API error into a user-friendly message based on HTTP status code
+  const parseApiError = async (res: Response): Promise<string> => {
+    try {
+      await res.json()
+      const status = res.status
+
+      if (status === 400) return locale === 'en' ? '400 Request parameter error' : '400 请求参数错误'
+      if (status === 401) return locale === 'en' ? '401 API key is invalid or expired' : '401 API 密钥无效或已过期'
+      if (status === 403) return locale === 'en' ? '403 Insufficient permissions for this model' : '403 没有该模型的访问权限'
+      if (status === 404) return locale === 'en' ? '404 Model or service not found' : '404 模型或服务不存在'
+      if (status === 429) return locale === 'en' ? '429 Too many requests or quota exceeded' : '429 请求过于频繁或配额已用完'
+      if (status >= 500) return locale === 'en' ? '500 Service temporarily unavailable' : '500 服务暂时不可用'
+      return locale === 'en' ? `${status} Service error` : `${status} 服务错误`
+    } catch { /* ignore parse errors */ }
+    return locale === 'en' ? 'Service temporarily unavailable' : '服务暂时不可用'
   }
   const handleAdd = (type: keyof DropdownOptions, value: string) => {
     if (options[type].includes(value)) return
@@ -552,7 +570,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
       setGenStep(mode === 'bedtime' ? t('create.step.preparingGuide') : t('create.step.analyzingEmotion'))
       console.log('[generate] 开始生成引导建议')
       const guideRes = await fetch('/api/trouble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
-      if (!guideRes.ok) throw new Error((await guideRes.json()).error)
+      if (!guideRes.ok) throw new Error(await parseApiError(guideRes))
       let guide: Guide = await guideRes.json()
       console.log('[generate] 引导建议完成')
 
@@ -565,7 +583,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
       }, 6000)
       const storyRes = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
       clearTimeout(storyStepTimer)
-      if (!storyRes.ok) throw new Error((await storyRes.json()).error)
+      if (!storyRes.ok) throw new Error(await parseApiError(storyRes))
       const storyData = await storyRes.json()
       let story: Story = storyData.story ?? storyData
       let characters = storyData.characters ?? []
@@ -575,7 +593,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
       setGenStep(t('create.step.generatingContent'))
       console.log('[generate] ③ 正在生成故事内容 ...')
       const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang, illustrationStyleId: styleId }) })
-      if (!transRes.ok) throw new Error((await transRes.json()).error)
+      if (!transRes.ok) throw new Error(await parseApiError(transRes))
       const translated = await transRes.json()
       story = translated.story
       guide = translated.guide
@@ -588,55 +606,122 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
       console.log('[generate] ⑥ 正在保存...')
       const saveBody = { ...input, guide, story, characters, illustrationStyleId: styleId }
       const saveRes = await fetch('/api/books', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saveBody) })
-      if (!saveRes.ok) throw new Error((await saveRes.json()).error)
+      if (!saveRes.ok) throw new Error(await parseApiError(saveRes))
       const book: BookItem = await saveRes.json()
       console.log(`[generate] ⑥ 保存完成: bookId=${book.id}`)
 
       const hasIllustrationPrompts =
         !!(book.story.cover?.imagePrompt?.trim()) || book.story.pages.some((p) => p.imagePrompt?.trim())
 
+      let refsFailed = false
+      let pagesFailed = false
+      let imageErrorCode = 0
+
       if (hasPictureLLM && hasIllustrationPrompts) {
+        
         // ④ 正在绘制角色定妆图...
         setGenStep(t('create.step.drawingRefs'))
         console.log('[generate] ④ 正在绘制角色定妆图...')
-        await fetch('/api/qwen-image/gen-refs', {
+        const refsRes = await fetch('/api/qwen-image/gen-refs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookId: book.id }),
         }).catch(console.error)
-        console.log('[generate] ④ 角色定妆图完成')
-
-        // ⑤ 正在生成绘本插图（第 X/N 页）...  — page by page for live progress
-        const sortedPages = [...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
-        const pagesToDraw = sortedPages.filter((p) => p.imagePrompt?.trim())
-        const hasCover = !!book.story.cover?.imagePrompt
-        const totalPages = pagesToDraw.length
-        let donePages = 0
-
-        if (hasCover) {
-          setGenStep(t('create.step.generatingCover'))
-          console.log('[generate] ⑤ 生成封面插图')
-          await fetch('/api/qwen-image/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookId: book.id, pageNumbers: [0] }),
-          }).catch(console.error)
+        
+        // 检查角色参考图是否有失败
+        if (refsRes) {
+          try {
+            const refsData = await refsRes.json()
+            refsFailed = refsData.results?.some((r: { success: boolean }) => !r.success)
+            if (refsFailed) {
+              const failed = refsData.results?.find((r: { success: boolean; statusCode?: number }) => !r.success)
+              imageErrorCode = failed?.statusCode || 0
+              console.warn('[generate] 角色参考图生成失败，跳过后续插图生成')
+            }
+          } catch (e) {
+            console.error('[generate] 解析角色参考图结果失败', e)
+          }
         }
+        
+        if (!refsFailed) {
+          console.log('[generate] ④ 角色定妆图完成')
 
-        for (const page of pagesToDraw) {
-          donePages++
-          setGenStep(t('create.step.generatingPage', { done: donePages, total: totalPages }))
-          console.log(`[generate] ⑤ 生成第 ${page.pageNumber} 页插图 (${donePages}/${totalPages})`)
-          await fetch('/api/qwen-image/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookId: book.id, pageNumbers: [page.pageNumber] }),
-          }).catch(console.error)
+          // ⑤ 正在生成绘本插图（第 X/N 页）...  — page by page for live progress
+          const sortedPages = [...book.story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
+          const pagesToDraw = sortedPages.filter((p) => p.imagePrompt?.trim())
+          const hasCover = !!book.story.cover?.imagePrompt
+          const totalPages = pagesToDraw.length
+          let donePages = 0
+
+          if (hasCover) {
+            setGenStep(t('create.step.generatingCover'))
+            console.log('[generate] ⑤ 生成封面插图')
+            const coverRes = await fetch('/api/qwen-image/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bookId: book.id, pageNumbers: [0] }),
+            }).catch(console.error)
+            
+            if (coverRes) {
+              try {
+                const coverData = await coverRes.json()
+                pagesFailed = coverData.results?.some((r: { success: boolean }) => !r.success)
+                if (pagesFailed) {
+                  const failed = coverData.results?.find((r: { success: boolean; statusCode?: number }) => !r.success)
+                  imageErrorCode = failed?.statusCode || 0
+                  console.warn('[generate] 封面插图生成失败，跳过后续页面')
+                }
+              } catch (e) {
+                console.error('[generate] 解析封面结果失败', e)
+              }
+            }
+          }
+
+          if (!pagesFailed) {
+            for (const page of pagesToDraw) {
+              donePages++
+              setGenStep(t('create.step.generatingPage', { done: donePages, total: totalPages }))
+              console.log(`[generate] ⑤ 生成第 ${page.pageNumber} 页插图 (${donePages}/${totalPages})`)
+              const pageRes = await fetch('/api/qwen-image/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookId: book.id, pageNumbers: [page.pageNumber] }),
+              }).catch(console.error)
+              
+              if (pageRes) {
+                try {
+                  const pageData = await pageRes.json()
+                  pagesFailed = pageData.results?.some((r: { success: boolean }) => !r.success)
+                  if (pagesFailed) {
+                    const failed = pageData.results?.find((r: { success: boolean; statusCode?: number }) => !r.success)
+                    imageErrorCode = failed?.statusCode || 0
+                    console.warn(`[generate] 第 ${page.pageNumber} 页插图生成失败，跳过后续页面`)
+                    break
+                  }
+                } catch (e) {
+                  console.error('[generate] 解析页面结果失败', e)
+                }
+              }
+            }
+          }
+          
+          if (pagesFailed) {
+            console.warn('[generate] 插图生成过程中出现失败')
+          } else {
+            console.log('[generate] ⑤ 所有插图生成完成')
+          }
         }
-        console.log('[generate] ⑤ 所有插图生成完成')
       }
 
-      onCreated(book); onClose()
+      const hadImageFailure = refsFailed || pagesFailed
+
+      // 关闭创建窗口后，通知用户图片生成有失败
+      if (hadImageFailure) {
+        onClose()
+        setTimeout(() => onWarning?.(t('create.warning.imageGenerationFailed'), imageErrorCode), 200)
+      } else {
+        onCreated(book); onClose()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('create.error.generateFailed'))
     } finally { setGenerating(false); setGenStep('') }
@@ -644,7 +729,7 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" style={{ visibility: hidden ? 'hidden' : 'visible', transition: 'visibility 0s' }}>
       <div className="relative bg-white rounded-2xl shadow-2xl flex flex-col" style={{ width: '520px' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <h3 className="font-bold text-gray-800 text-lg">{t('create.title')}</h3>
@@ -672,7 +757,10 @@ function CreateModal({ open, onClose, options, onOptionsChange, onCreated, displ
           </div>
         ) : (
           <div className="px-6 py-5 space-y-5">
-            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+              <span className="text-base flex-shrink-0">❌</span>
+              <span>{error}</span>
+            </div>}
 
             {/* Emotion mode */}
             {mode === 'emotion' && (<>
@@ -800,7 +888,10 @@ export default function HomePage() {
   const [books, setBooks] = useState<BookItem[]>([])
   const [selectedBook, setSelectedBook] = useState<BookItem | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [createHidden, setCreateHidden] = useState(false)
   const [createModalKey, setCreateModalKey] = useState(0)
+  const [warning, setWarning] = useState<string | null>(null)
+  const [warningDetail, setWarningDetail] = useState<string>('')
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminBootstrap, setAdminBootstrap] = useState<{ keys: APIKeyView[]; llm: LLMSettings } | null>(null)
   const [adminBootstrapKey, setAdminBootstrapKey] = useState(0)
@@ -996,12 +1087,55 @@ export default function HomePage() {
         <CreateModal
           key={createModalKey}
           open={createOpen}
-          onClose={() => setCreateOpen(false)}
+          hidden={createHidden}
+          onClose={() => { setCreateOpen(false); setCreateHidden(false) }}
           options={options}
           onOptionsChange={setOptions}
           onCreated={handleCreated}
           displayLang={locale === 'en' ? 'en' : 'zh'}
+          locale={locale}
+          onWarning={(title, statusCode) => {
+            setCreateHidden(true)
+            setWarning(title)
+            const code = typeof statusCode === 'number' ? statusCode : 0
+            if (code === 400) setWarningDetail(locale === 'en' ? '400 Request parameter error' : '400 请求参数错误')
+            else if (code === 401) setWarningDetail(locale === 'en' ? '401 API key is invalid or expired' : '401 API 密钥无效或已过期')
+            else if (code === 403) setWarningDetail(locale === 'en' ? '403 Insufficient permissions for this model' : '403 没有该模型的访问权限')
+            else if (code === 404) setWarningDetail(locale === 'en' ? '404 Model or service not found' : '404 模型或服务不存在')
+            else if (code === 429) setWarningDetail(locale === 'en' ? '429 Too many requests or quota exceeded' : '429 请求过于频繁或配额已用完')
+            else if (code >= 500) setWarningDetail(locale === 'en' ? '500 Service temporarily unavailable' : '500 服务暂时不可用')
+            else setWarningDetail(locale === 'en' ? 'Unknown error' : '未知错误')
+          }}
         />
+      )}
+
+      {/* Warning notification overlay */}
+      {warning && (
+        <div className="fixed inset-0 flex items-center justify-center z-[100] p-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => { setWarning(null); setCreateOpen(false); setCreateHidden(false) }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3">
+              <span className="text-3xl flex-shrink-0 mt-0.5">⚠️</span>
+              <div>
+                <h4 className="text-base font-bold text-gray-800">
+                  {locale === 'en' ? 'Notice: ' : '提示：'}{warning.replace(/^⚠️\s*/, '')}
+                </h4>
+                {warningDetail && (
+                  <p className="text-gray-500 text-sm mt-1">{warningDetail}</p>
+                )}
+                {!warningDetail && (
+                  <p className="text-gray-500 text-sm mt-1">{t('create.warning.imageFailedHint')}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => { setWarning(null); setCreateOpen(false); setCreateHidden(false) }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-8 py-2.5 rounded-xl transition-colors text-sm">
+                {locale === 'en' ? 'OK' : '知道了'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {adminOpen && adminBootstrap && (
         <AdminPage

@@ -7,6 +7,12 @@ import type { CharacterCard } from '@/types'
 
 const DASHSCOPE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 
+export class QwenImageError extends Error {
+  constructor(public statusCode: number, public detail: string) {
+    super(`qwen-image API 请求失败: ${statusCode} ${detail}`)
+  }
+}
+
 // 「不同动物融合一体」含半兔半鼠式等：多只动物特征错误拼在同一身体上
 const NEGATIVE_PROMPT =
   '低分辨率，低画质，肢体畸形，手指畸形，多余肢体，缺少肢体，穿模，模型穿插，身体扭曲，比例失调，脸部变形，五官错乱，眼睛不对称，多只眼睛，第三只眼，三只眼，独眼，多张嘴，额外的头，单耳，缺耳，耳朵数量错误，不对称耳朵，关节异常，骨骼扭曲，身体部位重叠，嵌合体，杂交，不同动物融合一体，多动物头，多个动物头部拼在一个身体上，物种混合，把两个角色的特征画在同一个身体上，随意添加触角，多余触角，参考图中没有的触角，凭空触角，不相符的触角，画面过饱和，蜡像感，塑料假皮，人脸无细节，过度光滑，皮毛质感混乱，画面具有AI感，构图混乱，文字模糊，扭曲，恐怖，怪异。'
@@ -107,19 +113,21 @@ async function callQwenImageAPI(
         await sleep(delay)
         continue
       }
-      const errorText = await response.text()
-      throw new Error(`qwen-image API 请求失败: 429 ${errorText}`)
+      throw new QwenImageError(429, 'Too Many Requests')
     }
 
     if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`qwen-image API 请求失败: ${response.status} ${errorText}`)
+      const errorData = await response.json().catch(() => null)
+      const code = errorData?.code || ''
+      const msg = errorData?.message || ''
+      const shortMsg = msg.split('.')[0].split('，')[0].slice(0, 80)
+      throw new QwenImageError(response.status, code || shortMsg || 'Server Error')
     }
 
     const data = await response.json() as QwenImageResponse
 
     if (data.code || data.message) {
-      throw new Error(`图片生成失败: ${data.code} ${data.message}`)
+      throw new QwenImageError(0, `${data.code} ${data.message}`)
     }
 
     // Simple format: output.results[].url (qwen-image-plus / sync)
@@ -134,7 +142,7 @@ async function callQwenImageAPI(
     return imageUrl
   }
 
-  throw new Error('图片生成超过最大重试次数')
+  throw new QwenImageError(0, '图片生成超过最大重试次数')
 }
 
 async function downloadImage(url: string): Promise<Buffer> {
@@ -257,7 +265,9 @@ router.post('/gen-refs', async (req, res) => {
         results.push({ index: i, name: c.name, success: true })
       } catch (err) {
         console.error(`[qwen-image] 角色参考图 [${i}] ${c.nameEn} 生成失败:`, err)
-        results.push({ index: i, name: c.name, success: false, error: String(err) })
+        const statusCode = err instanceof QwenImageError ? err.statusCode : 0
+        const detail = err instanceof QwenImageError ? err.detail : String(err)
+        results.push({ index: i, name: c.name, success: false, statusCode, detail })
       }
     }
 
@@ -333,7 +343,9 @@ router.post('/generate', async (req, res) => {
         results.push({ pageNumber: 0, success: true })
       } catch (err) {
         console.error('[qwen-image] 封面生成失败:', err)
-        results.push({ pageNumber: 0, success: false, error: String(err) })
+        const statusCode = err instanceof QwenImageError ? err.statusCode : 0
+        const detail = err instanceof QwenImageError ? err.detail : String(err)
+        results.push({ pageNumber: 0, success: false, statusCode, detail })
       }
     }
 
@@ -372,7 +384,9 @@ router.post('/generate', async (req, res) => {
         results.push({ pageNumber: page.pageNumber, success: true })
       } catch (err) {
         console.error(`[qwen-image] 第 ${page.pageNumber} 页生成失败:`, err)
-        results.push({ pageNumber: page.pageNumber, success: false, error: String(err) })
+        const statusCode = err instanceof QwenImageError ? err.statusCode : 0
+        const detail = err instanceof QwenImageError ? err.detail : String(err)
+        results.push({ pageNumber: page.pageNumber, success: false, statusCode, detail })
       }
     }
 

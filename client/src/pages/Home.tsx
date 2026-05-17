@@ -892,6 +892,9 @@ export default function HomePage() {
   const [createModalKey, setCreateModalKey] = useState(0)
   const [warning, setWarning] = useState<string | null>(null)
   const [warningDetail, setWarningDetail] = useState<string>('')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState('')
+  const [deleteTargetName, setDeleteTargetName] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminBootstrap, setAdminBootstrap] = useState<{ keys: APIKeyView[]; llm: LLMSettings } | null>(null)
   const [adminBootstrapKey, setAdminBootstrapKey] = useState(0)
@@ -951,9 +954,16 @@ export default function HomePage() {
     setCreateOpen(true)
   }
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm(t('home.confirmDelete'))) return
+    setDeleteTargetId(id)
+    setDeleteTargetName(name)
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    setDeleteConfirmOpen(false)
+    const id = deleteTargetId
     const res = await fetch(`/api/books/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setBooks((prev) => {
@@ -1058,7 +1068,7 @@ export default function HomePage() {
                     </>)
                   })()}
                 </div>
-                <button onClick={(e) => handleDelete(book.id, e)}
+                <button onClick={(e) => handleDelete(book.id, book.title?.text ?? book.id, e)}
                   className="opacity-0 group-hover:opacity-100 flex-shrink-0 w-6 h-6 text-gray-300 hover:text-red-500 flex items-center justify-center rounded transition-all text-lg leading-none" title="删除">
                   ×
                 </button>
@@ -1137,6 +1147,39 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation overlay */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-[100] p-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setDeleteConfirmOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <span className="text-3xl">🗑️</span>
+              </div>
+              <h4 className="text-lg font-bold text-gray-800 mb-2">
+                {locale === 'en' ? 'Delete Picture Book?' : '确认删除绘本？'}
+              </h4>
+              <p className="text-gray-600 text-sm leading-relaxed mb-6">
+                {locale === 'en'
+                  ? `"${deleteTargetName}" will be permanently deleted. This action cannot be undone.`
+                  : `绘本"${deleteTargetName}"将被永久删除，此操作无法撤销。`}
+              </p>
+              <div className="flex gap-3 w-full">
+                <button onClick={() => setDeleteConfirmOpen(false)}
+                  className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">
+                  {locale === 'en' ? 'Cancel' : '取消'}
+                </button>
+                <button onClick={confirmDelete}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+                  {locale === 'en' ? 'Delete' : '删除'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {adminOpen && adminBootstrap && (
         <AdminPage
           key={adminBootstrapKey}

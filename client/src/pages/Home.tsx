@@ -215,10 +215,10 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
   // Reset when book changes or UI locale changes
   useEffect(() => {
     setIdx(0); setPlaying(false); speechSynthesis.cancel()
-    setVoiceLang(defaultVoiceLang(book.uiLang))
+    setVoiceLang(uiLocale === 'en' ? 'en' : 'zh')
     setVoiceEnabled(true)
     setCoverImageFailed(false)
-    setHasInteracted(false)  // 重置交互状态
+    setHasInteracted(false)
   }, [book.id, uiLocale])
 
   const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {

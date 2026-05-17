@@ -516,6 +516,7 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [warnPictureLLM, setWarnPictureLLM] = useState(false)
 
   const persistOptions = (updated: DropdownOptions) => {
     onOptionsChange(updated)
@@ -563,7 +564,9 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
       setError(t('create.error.configureStoryLlm'))
       return
     }
-    setError(null); setGenerating(true)
+    setError(null)
+    setWarnPictureLLM(!hasPictureLLM)
+    setGenerating(true)
     const input = { emotion, scene, ageGroup, description, protagonistPreset, mode, theme, textLang, uiLang }
     try {
       // Guide (background step, no numbered display)
@@ -715,12 +718,10 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
 
       const hadImageFailure = refsFailed || pagesFailed
 
-      // 关闭创建窗口后，通知用户图片生成有失败
+      // 绘本文本已生成，加入列表；如果有图片失败，同时通知用户
+      onCreated(book); onClose()
       if (hadImageFailure) {
-        onClose()
         setTimeout(() => onWarning?.(t('create.warning.imageGenerationFailed'), imageErrorCode), 200)
-      } else {
-        onCreated(book); onClose()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('create.error.generateFailed'))
@@ -873,6 +874,14 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
                 {t('create.start')}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Inline warning for missing picture LLM */}
+        {warnPictureLLM && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+            <span className="text-base flex-shrink-0">⚠️</span>
+            <span>{t('create.warning.noPictureLlm')}</span>
           </div>
         )}
 

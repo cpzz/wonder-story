@@ -75,6 +75,7 @@ const homeZh = {
   'create.error.generateFailed': '生成失败，请重试',
   'create.warning.imageGenerationFailed': '⚠️ 部分插图生成失败',
   'create.warning.imageFailedHint': '请检查管理后台的图片模型配置',
+  'create.warning.noPictureLlm': '未配置插画 LLM，本次将不生成插图',
 
   // Create Modal - Options
   'create.noOptions': '暂无选项',
@@ -224,6 +225,7 @@ const homeEn = {
   'create.error.generateFailed': 'Generation failed, please try again',
   'create.warning.imageGenerationFailed': '⚠️ Some illustrations failed to generate',
   'create.warning.imageFailedHint': 'Please check the image model settings',
+  'create.warning.noPictureLlm': 'Picture LLM not configured, images will not be generated',
 
   'create.noOptions': 'No options',
   'create.addOption': 'Add option...',

@@ -268,6 +268,7 @@ router.post('/gen-refs', async (req, res) => {
         const statusCode = err instanceof QwenImageError ? err.statusCode : 0
         const detail = err instanceof QwenImageError ? err.detail : String(err)
         results.push({ index: i, name: c.name, success: false, statusCode, detail })
+        break
       }
     }
 

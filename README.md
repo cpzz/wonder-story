@@ -169,7 +169,7 @@ A: 所有数据存储在本地 `user/` 目录中，建议定期备份。请勿�
 
 ## License
 
-MIT
+Apache License 2.0
 
 ---
 

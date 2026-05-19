@@ -167,7 +167,7 @@ A: All data is stored locally in the `user/` directory. Regular backups are reco
 
 ## License
 
-MIT
+Apache License 2.0
 
 ---
 

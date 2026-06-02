@@ -29,7 +29,13 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: '缺少必填字段' })
     }
     const book: BookItem = saveBook({
-      title: { text: story.cover.text, textEn: story.cover.textEn },
+      title: {
+        text: story.cover.text,
+        textEn: story.cover.textEn,
+        textJa: story.cover.textJa,
+        textKo: story.cover.textKo,
+        textFr: story.cover.textFr,
+      },
       emotion: emotion ?? '',
       scene: scene ?? '',
       ageGroup,

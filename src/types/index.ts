@@ -93,18 +93,46 @@ export interface TroubleInput {
   uiLang?: UILang
 }
 
-export interface StoryPage {
-  pageNumber: number
+/**
+ * 多语言文本字段。
+ * - `text` 必填，存放创作时的主体语言（中文）原文。
+ * - 其他语言为可选，缺失时回退到 `text`。
+ * - 朗读/界面显示时会按 `LangCode` 优先级取首个非空字段。
+ */
+export type LocalizedText = {
   text: string
   textEn?: string
+  textJa?: string
+  textKo?: string
+  textFr?: string
+} & Record<string, string | undefined>
+
+/** 单条多语言文本（用于 Guide 的 emotion/message） */
+export type LocalizedValue = {
+  text: string
+  textEn?: string
+  textJa?: string
+  textKo?: string
+  textFr?: string
+}
+
+/** 多条多语言文本（用于 Guide.tips） */
+export interface LocalizedList {
+  text: string[]
+  textEn?: string[]
+  textJa?: string[]
+  textKo?: string[]
+  textFr?: string[]
+}
+
+export interface StoryPage extends LocalizedText {
+  pageNumber: number
   /** 该页插图英文描述（文生图用） */
   imagePrompt?: string
 }
 
-/** 封面：书名 + 可选英文 + 封面插图描述 */
-export interface StoryCover {
-  text: string
-  textEn?: string
+/** 封面：书名 + 多语言 + 封面插图描述 */
+export interface StoryCover extends LocalizedText {
   imagePrompt?: string
 }
 
@@ -131,16 +159,16 @@ export interface CharacterCard {
 }
 
 export interface Guide {
-  emotion: { text: string; textEn?: string }
-  message: { text: string; textEn?: string }
-  tips: { text: string[]; textEn?: string[] }
+  emotion: LocalizedValue
+  message: LocalizedValue
+  tips: LocalizedList
 }
 
 // ── Books ──
 
 export interface BookItem {
   id: string
-  title: { text: string; textEn?: string }
+  title: LocalizedValue
   emotion: string
   scene: string
   ageGroup: string

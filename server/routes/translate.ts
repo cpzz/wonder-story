@@ -1,14 +1,16 @@
 import { Router } from 'express'
 import { generateJSON } from '@/lib/textGeneration'
 import { getStylePrompt, getStyleName } from '@/lib/illustrationStyles'
+import { LANGUAGES, LANG_CODES, type LangCode } from '@/lib/languages'
 import type { Story, Guide, CharacterCard } from '@/types'
 
 const TRANSLATE_SYSTEM_BASE = `You are a professional children's book translator and illustrator.
 Rules you MUST follow:
-- Translate ONLY the text values marked with "textEn": "". Do NOT add, infer, or explain anything.
-- Fill in every "textEn" field with the English translation of the corresponding "text" field.
-- Fill in every "imagePrompt" field with a vivid English illustration description for that page.
-- Return ONLY valid JSON with the exact same structure as the input.
+- Translate the source text (in "text") into ALL of the following target languages: English (textEn), Japanese (textJa), Korean (textKo), French (textFr).
+  - "text" (Simplified Chinese) is the source — keep it untouched.
+  - Keep translations short, natural, and warm, suitable for ages 2-10 reading aloud.
+- Fill in every "imagePrompt" field with a vivid English illustration description for that page. The imagePrompt should be in English even for non-English stories, since it feeds an English image-generation model.
+- Return ONLY valid JSON with the exact same structure as the input (no extra keys, no missing keys).
 - Do NOT change any other fields.
 
 Reference-image tagging (apply to every imagePrompt and cover.imagePrompt):
@@ -60,17 +62,38 @@ function buildCharacterRef(characters: CharacterCard[]): string {
   return [...head, ...tail].join('\n')
 }
 
+/** 单一 LocalizedValue 的扁平化 JSON 形态 */
+type LocalizedJSON = {
+  text: string
+  textEn: string
+  textJa: string
+  textKo: string
+  textFr: string
+}
+
 /** LLM I/O bundle：封面与正文分离，避免重复 title */
 interface BundleInput {
-  cover: { text: string; textEn: string; imagePrompt: string }
+  cover: LocalizedJSON & { imagePrompt: string }
   story: {
-    pages: { pageNumber: number; text: string; textEn: string; imagePrompt: string }[]
+    pages: ({ pageNumber: number } & LocalizedJSON & { imagePrompt: string })[]
   }
   guide: {
-    emotion: { text: string; textEn: string }
-    message: { text: string; textEn: string }
-    tips: { text: string; textEn: string }[]
+    emotion: LocalizedJSON
+    message: LocalizedJSON
+    tips: LocalizedJSON[]
   }
+}
+
+function emptyLocalized(text: string): LocalizedJSON {
+  return { text, textEn: '', textJa: '', textKo: '', textFr: '' }
+}
+
+function langFieldFor(code: LangCode): keyof LocalizedJSON {
+  if (code === 'zh') return 'text'
+  if (code === 'en') return 'textEn'
+  if (code === 'ja') return 'textJa'
+  if (code === 'ko') return 'textKo'
+  return 'textFr'
 }
 
 const router = Router()
@@ -88,28 +111,32 @@ router.post('/', async (req, res) => {
     const sortedPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
     const characterRef = buildCharacterRef(characters)
 
+    const targetLangList = LANGUAGES
+      .filter((l) => l.code !== 'zh')
+      .map((l) => `${l.translateName} (${langFieldFor(l.code)})`)
+      .join(', ')
+
     const input: BundleInput = {
       cover: {
-        text: story.cover.text,
-        textEn: '',
+        ...emptyLocalized(story.cover.text),
         imagePrompt: '',
       },
       story: {
         pages: sortedPages.map((p) => ({
           pageNumber: p.pageNumber,
-          text: p.text,
-          textEn: '',
+          ...emptyLocalized(p.text),
           imagePrompt: '',
         })),
       },
       guide: {
-        emotion: { text: guide.emotion.text, textEn: '' },
-        message: { text: guide.message.text, textEn: '' },
-        tips: guide.tips.text.map((t) => ({ text: t, textEn: '' })),
+        emotion: emptyLocalized(guide.emotion.text),
+        message: emptyLocalized(guide.message.text),
+        tips: guide.tips.text.map((t) => emptyLocalized(t)),
       },
     }
 
-    const userPrompt = `Translate all "textEn" fields to English, fill all "imagePrompt" fields (each story page and cover), and fill "cover.imagePrompt" for the book cover illustration.
+    const userPrompt = `Translate the source "text" (Simplified Chinese) into each of the following target languages: ${targetLangList}.
+Fill in the matching ${langFieldFor(LANG_CODES.find((c) => c !== 'zh')!)}… fields, and also fill "imagePrompt" for the cover and every story page (English, vivid illustration description, ≤120 words each; ≤100 words for the cover).
 
 Character reference (strictly follow for every imagePrompt and cover.imagePrompt). [Image N / 图片N] = N-th character in the roster (see system rules). Use matching (image N) /（图片N）tags in prompts:
 ${characterRef}
@@ -135,6 +162,9 @@ ${JSON.stringify(input, null, 2)}`
       cover: {
         text: story.cover.text,
         textEn: result.cover?.textEn?.trim() ?? '',
+        textJa: result.cover?.textJa?.trim() ?? '',
+        textKo: result.cover?.textKo?.trim() ?? '',
+        textFr: result.cover?.textFr?.trim() ?? '',
         imagePrompt: result.cover?.imagePrompt?.trim() ?? '',
       },
       pages: sortedPages.map((p, i) => {
@@ -142,17 +172,35 @@ ${JSON.stringify(input, null, 2)}`
         return {
           ...p,
           textEn: matched?.textEn?.trim() ?? '',
+          textJa: matched?.textJa?.trim() ?? '',
+          textKo: matched?.textKo?.trim() ?? '',
+          textFr: matched?.textFr?.trim() ?? '',
           imagePrompt: matched?.imagePrompt?.trim() ?? '',
         }
       }),
     }
 
     const translatedGuide: Guide = {
-      emotion: { text: guide.emotion.text, textEn: result.guide?.emotion?.textEn?.trim() ?? '' },
-      message: { text: guide.message.text, textEn: result.guide?.message?.textEn?.trim() ?? '' },
+      emotion: {
+        text: guide.emotion.text,
+        textEn: result.guide?.emotion?.textEn?.trim() ?? '',
+        textJa: result.guide?.emotion?.textJa?.trim() ?? '',
+        textKo: result.guide?.emotion?.textKo?.trim() ?? '',
+        textFr: result.guide?.emotion?.textFr?.trim() ?? '',
+      },
+      message: {
+        text: guide.message.text,
+        textEn: result.guide?.message?.textEn?.trim() ?? '',
+        textJa: result.guide?.message?.textJa?.trim() ?? '',
+        textKo: result.guide?.message?.textKo?.trim() ?? '',
+        textFr: result.guide?.message?.textFr?.trim() ?? '',
+      },
       tips: {
         text: guide.tips.text,
         textEn: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textEn?.trim() ?? ''),
+        textJa: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textJa?.trim() ?? ''),
+        textKo: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textKo?.trim() ?? ''),
+        textFr: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textFr?.trim() ?? ''),
       },
     }
 
@@ -160,7 +208,7 @@ ${JSON.stringify(input, null, 2)}`
       `[translate] story: cover imagePrompt=${!!translatedStory.cover.imagePrompt}, pages=${translatedStory.pages.length}, emptyPrompts=${translatedStory.pages.filter((p) => !p.imagePrompt).length}`,
     )
 
-    // 始终返回完整的双语数据，不因 UI 语言而清空任何字段
+    // 始终返回完整的多语言数据
     res.json({ story: translatedStory, guide: translatedGuide })
   } catch (err) {
     console.error('[POST /api/translate]', err)

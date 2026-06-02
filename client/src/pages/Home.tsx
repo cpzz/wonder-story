@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { BookItem, DropdownOptions, Guide, Story, APIKeyView, LLMSettings } from '@/types'
 import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
+import { LANGUAGES, LANG_BY_CODE, localizedFieldName, pickVoiceForLang, type LangCode } from '@/lib/languages'
 import { useI18n } from '../i18n'
 import '../i18n/locales'
 import AdminPage from './Admin'
+import { isLatinLocale } from '../i18n'
 
 // ── Illustration styles ──
 
@@ -131,13 +133,24 @@ function EditableSelect({
 
 // ── GuideModal ──
 
-function GuideModal({ book, lang, onClose }: { book: BookItem; lang: 'zh' | 'en'; onClose: () => void }) {
+function GuideModal({ book, lang, onClose }: { book: BookItem; lang: LangCode; onClose: () => void }) {
   const { t } = useI18n()
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
-  const useEn = lang === 'en'
-  const message = useEn && book.guide.message.textEn ? book.guide.message.textEn : book.guide.message.text
-  const tipsArr = useEn && book.guide.tips.textEn?.length ? book.guide.tips.textEn : book.guide.tips.text
+  const getText = (v: { text: string; textEn?: string; textJa?: string; textKo?: string; textFr?: string }): string => {
+    const key = localizedFieldName(lang)
+    const candidate = (v as Record<string, string | undefined>)[key]
+    if (candidate?.trim()) return candidate
+    return v.text
+  }
+  const getTips = (list: { text: string[]; textEn?: string[]; textJa?: string[]; textKo?: string[]; textFr?: string[] }): string[] => {
+    const key = localizedFieldName(lang)
+    const candidate = (list as Record<string, string[] | undefined>)[key]
+    if (Array.isArray(candidate) && candidate.length) return candidate
+    return list.text
+  }
+  const message = getText(book.guide.message)
+  const tipsArr = getTips(book.guide.tips)
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="bg-white rounded-2xl shadow-2xl w-fit max-w-[66vw] min-w-80 max-h-[80vh] overflow-y-auto">
@@ -172,9 +185,9 @@ function GuideModal({ book, lang, onClose }: { book: BookItem; lang: 'zh' | 'en'
 type ReaderPage =
   | { type: 'cover' }
   | { type: 'guide' }
-  | { type: 'story'; pageNumber: number; text: string; textEn?: string; imagePrompt?: string }
+  | { type: 'story'; pageNumber: number; text: string; textEn?: string; textJa?: string; textKo?: string; textFr?: string; imagePrompt?: string }
 
-function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; onDisplayLangChange?: (lang: 'zh' | 'en') => void; uiLocale: 'zh' | 'en' }) {
+function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; onDisplayLangChange?: (lang: LangCode) => void; uiLocale: LangCode }) {
   const { t } = useI18n()
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
@@ -186,6 +199,9 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
       pageNumber: p.pageNumber,
       text: p.text,
       textEn: p.textEn,
+      textJa: p.textJa,
+      textKo: p.textKo,
+      textFr: p.textFr,
       imagePrompt: p.imagePrompt,
     })),
   ]
@@ -195,20 +211,35 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [hasInteracted, setHasInteracted] = useState(false)  // 跟踪用户是否进行了交互
-  const defaultVoiceLang = (uiLang?: string): 'zh' | 'en' | 'off' => {
+  const defaultVoiceLang = (uiLang?: string): LangCode => {
     if (uiLang === 'en') return 'en'
     if (uiLocale === 'en') return 'en'
+    if (uiLocale === 'zh') return 'zh'
     return 'zh'
   }
-  const [voiceLang, setVoiceLang] = useState<'zh' | 'en' | 'off'>(() => defaultVoiceLang(book.uiLang))
+  const [voiceLang, setVoiceLang] = useState<LangCode | 'off'>(() => defaultVoiceLang(book.uiLang))
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [guideOpen, setGuideOpen] = useState(false)
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({})
   const [coverImageFailed, setCoverImageFailed] = useState(false)
+  const [voiceMenuOpen, setVoiceMenuOpen] = useState(false)
+  const voiceMenuRef = useRef<HTMLDivElement>(null)
+
+  // 关闭朗读语言下拉
+  useEffect(() => {
+    if (!voiceMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (voiceMenuRef.current && !voiceMenuRef.current.contains(e.target as Node)) {
+        setVoiceMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [voiceMenuOpen])
 
   // Notify parent of active display language
   useEffect(() => {
-    if (voiceLang === 'zh' || voiceLang === 'en') onDisplayLangChange?.(voiceLang)
+    if (voiceLang !== 'off') onDisplayLangChange?.(voiceLang)
   }, [voiceLang])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -219,29 +250,35 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
     setVoiceEnabled(true)
     setCoverImageFailed(false)
     setHasInteracted(false)
-  }, [book.id, uiLocale])
+  }, [book.id, uiLocale]) // uiLocale 已是 LangCode；非 en 时落回中文
+
+  /** 从 LocalizedValue 风格的扁平字段中，按当前 voiceLang 取出文本 */
+  const getText = useCallback((fields: Record<string, string | undefined> | undefined): string => {
+    if (!fields) return ''
+    if (voiceLang === 'off') return fields.text ?? ''
+    const key = localizedFieldName(voiceLang)
+    if (fields[key]?.trim()) return fields[key] as string
+    if (fields.text?.trim()) return fields.text
+    return ''
+  }, [voiceLang])
 
   const getSpeakable = useCallback((p: ReaderPage): { text: string; voice: SpeechSynthesisVoice | null } | null => {
     if (!voiceEnabled || voiceLang === 'off') return null
     if (p.type === 'guide') return null  // 引导页不朗读
     // 封面页只有在用户交互后才朗读
     if (p.type === 'cover' && !hasInteracted) return null
-    const getStoredVoice = (lang: 'zh' | 'en') => {
+    const lang = voiceLang as LangCode
+    const getStoredVoice = (code: LangCode) => {
       const all = speechSynthesis.getVoices()
-      const name = localStorage.getItem(lang === 'zh' ? 'wstory_zh_voice' : 'wstory_en_voice')
-      if (name) return all.find((v) => v.name === name) ?? all.find((v) => v.lang.startsWith(lang)) ?? null
-      return all.find((v) => v.lang.startsWith(lang)) ?? null
+      const stored = localStorage.getItem(`wstory_${code}_voice`)
+      return pickVoiceForLang(all, code, stored ?? undefined)
     }
     // 封面页朗读标题
     if (p.type === 'cover') {
-      const title = voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text
-      return { text: title, voice: getStoredVoice(voiceLang === 'en' ? 'en' : 'zh') }
+      return { text: getText({ text: book.title.text, textEn: book.title.textEn, textJa: book.title.textJa, textKo: book.title.textKo, textFr: book.title.textFr }), voice: getStoredVoice(lang) }
     }
-    if (voiceLang === 'en') {
-      return { text: p.textEn ?? p.text ?? '', voice: getStoredVoice('en') }
-    }
-    return { text: p.text, voice: getStoredVoice('zh') }
-  }, [book, voiceLang, voiceEnabled, hasInteracted])
+    return { text: getText({ text: p.text, textEn: p.textEn, textJa: p.textJa, textKo: p.textKo, textFr: p.textFr }), voice: getStoredVoice(lang) }
+  }, [book, voiceLang, voiceEnabled, hasInteracted, getText])
 
   const speak = useCallback((p: ReaderPage) => {
     speechSynthesis.cancel()
@@ -324,7 +361,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
                   <div className="relative">
                     <div className="text-7xl mb-6 drop-shadow-lg">{cover.emoji}</div>
                     <h2 className="text-white font-bold text-2xl leading-snug drop-shadow">
-                      {voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text}
+                      {getText({ text: book.title.text, textEn: book.title.textEn, textJa: book.title.textJa, textKo: book.title.textKo, textFr: book.title.textFr })}
                     </h2>
                   </div>
                   <div className="relative">
@@ -344,7 +381,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
             {/* Title below generated cover image */}
             {!coverImageFailed && (
               <h2 className="text-center font-bold text-gray-800 text-lg mt-3 leading-snug">
-                {voiceLang === 'en' && book.title.textEn ? book.title.textEn : book.title.text}
+                {getText({ text: book.title.text, textEn: book.title.textEn, textJa: book.title.textJa, textKo: book.title.textKo, textFr: book.title.textFr })}
               </h2>
             )}
           </div>
@@ -375,10 +412,9 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
               {/* Text overlay at bottom */}
               <div className="absolute bottom-0 left-0 right-0 px-4 py-4"
                 style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 100%)' }}>
-                {(() => {
-                  const displayText = voiceLang === 'en' && cur.textEn ? cur.textEn : cur.text
-                  return <p className="text-white text-lg leading-snug font-medium text-center drop-shadow">{displayText}</p>
-                })()}
+                <p className="text-white text-lg leading-snug font-medium text-center drop-shadow">
+                  {getText({ text: cur.text, textEn: cur.textEn, textJa: cur.textJa, textKo: cur.textKo, textFr: cur.textFr })}
+                </p>
               </div>
             </div>
           </div>
@@ -463,17 +499,34 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
             )}
           </button>
 
-          {/* 中|英 segmented language selector */}
-          <div className={`flex-shrink-0 flex border border-gray-200 rounded-xl overflow-hidden transition-opacity ${!voiceEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <button onClick={() => setVoiceLang('zh')}
-              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'zh' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>
-              {uiLocale === 'zh' ? '中' : 'CH'}
+          {/* 中|英|日|韩|法 朗读语言下拉菜单 */}
+          <div ref={voiceMenuRef} className={`flex-shrink-0 relative transition-opacity ${!voiceEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <button onClick={() => setVoiceMenuOpen((o) => !o)}
+              className="h-9 px-2.5 flex items-center gap-1.5 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:border-purple-300 hover:text-purple-600 transition-colors"
+              title={t('reader.voiceLang')}>
+              <span>
+                {voiceLang === 'off'
+                  ? `🔇 ${t('reader.voiceOff')}`
+                  : LANG_BY_CODE[voiceLang].labelNative}
+              </span>
+              <svg className={`w-3 h-3 transition-transform ${voiceMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-            <div className="w-px bg-gray-200" />
-            <button onClick={() => setVoiceLang('en')}
-              className={`px-2.5 h-9 text-xs font-bold transition-colors ${voiceLang === 'en' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>
-              {uiLocale === 'zh' ? '英' : 'EN'}
-            </button>
+            {voiceMenuOpen && (
+              <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 min-w-[140px]">
+                {LANGUAGES.map((l) => {
+                  const active = voiceLang === l.code
+                  return (
+                    <button key={l.code} type="button"
+                      onClick={() => { setVoiceLang(l.code); setVoiceMenuOpen(false) }}
+                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${active ? 'bg-purple-50 text-purple-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}>
+                      {l.labelNative}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Page label */}
@@ -482,7 +535,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
           </span>
         </div>
       </div>
-      {guideOpen && <GuideModal book={book} lang={voiceLang === 'en' ? 'en' : 'zh'} onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <GuideModal book={book} lang={voiceLang === 'off' ? 'zh' : voiceLang} onClose={() => setGuideOpen(false)} />}
     </div>
   )
 }
@@ -499,7 +552,7 @@ const DEFAULT_OPTIONS: DropdownOptions = {
 function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreated, displayLang, locale, onWarning }: {
   open: boolean; hidden?: boolean; onClose: () => void; options: DropdownOptions;
   onOptionsChange: (o: DropdownOptions) => void; onCreated: (b: BookItem) => void;
-  displayLang: 'zh' | 'en'; locale: 'zh' | 'en';
+  displayLang: LangCode; locale: LangCode;
   onWarning?: (title: string, statusCode?: number) => void;
 }) {
   const { t } = useI18n()
@@ -512,7 +565,7 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
   const [theme, setTheme] = useState('')
   const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID)
   const textLang: 'bilingual' = 'bilingual' // 始终为双语模式
-  const uiLang: 'zh' | 'en' = displayLang
+  const uiLang: 'zh' | 'en' = displayLang === 'en' ? 'en' : 'zh'
   const [generating, setGenerating] = useState(false)
   const [genStep, setGenStep] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -525,19 +578,20 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
 
   // Parse API error into a user-friendly message based on HTTP status code
   const parseApiError = async (res: Response): Promise<string> => {
+    const latin = isLatinLocale(locale)
     try {
       await res.json()
       const status = res.status
 
-      if (status === 400) return locale === 'en' ? '400 Request parameter error' : '400 请求参数错误'
-      if (status === 401) return locale === 'en' ? '401 API key is invalid or expired' : '401 API 密钥无效或已过期'
-      if (status === 403) return locale === 'en' ? '403 Insufficient permissions for this model' : '403 没有该模型的访问权限'
-      if (status === 404) return locale === 'en' ? '404 Model or service not found' : '404 模型或服务不存在'
-      if (status === 429) return locale === 'en' ? '429 Too many requests or quota exceeded' : '429 请求过于频繁或配额已用完'
-      if (status >= 500) return locale === 'en' ? '500 Service temporarily unavailable' : '500 服务暂时不可用'
-      return locale === 'en' ? `${status} Service error` : `${status} 服务错误`
+      if (status === 400) return latin ? '400 Request parameter error' : '400 请求参数错误'
+      if (status === 401) return latin ? '401 API key is invalid or expired' : '401 API 密钥无效或已过期'
+      if (status === 403) return latin ? '403 Insufficient permissions for this model' : '403 没有该模型的访问权限'
+      if (status === 404) return latin ? '404 Model or service not found' : '404 模型或服务不存在'
+      if (status === 429) return latin ? '429 Too many requests or quota exceeded' : '429 请求过于频繁或配额已用完'
+      if (status >= 500) return latin ? '500 Service temporarily unavailable' : '500 服务暂时不可用'
+      return latin ? `${status} Service error` : `${status} 服务错误`
     } catch { /* ignore parse errors */ }
-    return locale === 'en' ? 'Service temporarily unavailable' : '服务暂时不可用'
+    return latin ? 'Service temporarily unavailable' : '服务暂时不可用'
   }
   const handleAdd = (type: keyof DropdownOptions, value: string) => {
     if (options[type].includes(value)) return
@@ -908,9 +962,23 @@ export default function HomePage() {
   const [adminBootstrap, setAdminBootstrap] = useState<{ keys: APIKeyView[]; llm: LLMSettings } | null>(null)
   const [adminBootstrapKey, setAdminBootstrapKey] = useState(0)
   const [adminPrefetching, setAdminPrefetching] = useState(false)
-  const [displayLang, setDisplayLang] = useState<'zh' | 'en'>('zh')
+  const [displayLang, setDisplayLang] = useState<LangCode>('zh')
   const [options, setOptions] = useState<DropdownOptions>(DEFAULT_OPTIONS)
   const [loading, setLoading] = useState(true)
+  const [uiLangMenuOpen, setUiLangMenuOpen] = useState(false)
+  const uiLangMenuRef = useRef<HTMLDivElement>(null)
+
+  // 点击外部关闭 UI 语言下拉
+  useEffect(() => {
+    if (!uiLangMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (uiLangMenuRef.current && !uiLangMenuRef.current.contains(e.target as Node)) {
+        setUiLangMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [uiLangMenuOpen])
 
   useEffect(() => {
     fetch('/api/books').then((r) => (r.ok ? r.json() : [])).then((data: BookItem[]) => {
@@ -990,14 +1058,33 @@ export default function HomePage() {
           <div className="flex items-center justify-between mb-3">
             <h1 className="font-bold text-gray-800">{t('home.appTitle')}</h1>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors text-xs font-bold"
-                title={locale === 'zh' ? 'Switch to English' : '切换为中文'}
-              >
-                {locale === 'zh' ? 'EN' : '中'}
-              </button>
+              <div className="relative" ref={uiLangMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setUiLangMenuOpen((o) => !o)}
+                  className="h-8 px-3 flex items-center gap-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xs font-bold"
+                  title={t('home.uiLang')}
+                >
+                  <span>{LANG_BY_CODE[locale].labelNative}</span>
+                  <svg className={`w-3 h-3 transition-transform ${uiLangMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {uiLangMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 min-w-[140px]">
+                    {LANGUAGES.map((l) => {
+                      const active = locale === l.code
+                      return (
+                        <button key={l.code} type="button"
+                          onClick={() => { setLocale(l.code); setUiLangMenuOpen(false) }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${active ? 'bg-purple-50 text-purple-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}>
+                          {l.labelNative}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => { void openAdminSettings() }}
@@ -1065,9 +1152,9 @@ export default function HomePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   {(() => {
-                    const displayTitle = displayLang === 'en' && book.title.textEn
-                      ? book.title.textEn
-                      : book.title.text
+                    const titleKey = localizedFieldName(displayLang)
+                    const localizedTitle = (book.title as Record<string, string | undefined>)[titleKey]
+                    const displayTitle = localizedTitle?.trim() ? localizedTitle : book.title.text
                     return (<>
                       <div className="flex items-center gap-1.5">
                         <p className={`text-sm font-medium truncate ${isSelected ? 'text-purple-700' : 'text-gray-800'}`}>{displayTitle}</p>
@@ -1117,13 +1204,14 @@ export default function HomePage() {
             setCreateHidden(true)
             setWarning(title)
             const code = typeof statusCode === 'number' ? statusCode : 0
-            if (code === 400) setWarningDetail(locale === 'en' ? '400 Request parameter error' : '400 请求参数错误')
-            else if (code === 401) setWarningDetail(locale === 'en' ? '401 API key is invalid or expired' : '401 API 密钥无效或已过期')
-            else if (code === 403) setWarningDetail(locale === 'en' ? '403 Insufficient permissions for this model' : '403 没有该模型的访问权限')
-            else if (code === 404) setWarningDetail(locale === 'en' ? '404 Model or service not found' : '404 模型或服务不存在')
-            else if (code === 429) setWarningDetail(locale === 'en' ? '429 Too many requests or quota exceeded' : '429 请求过于频繁或配额已用完')
-            else if (code >= 500) setWarningDetail(locale === 'en' ? '500 Service temporarily unavailable' : '500 服务暂时不可用')
-            else setWarningDetail(locale === 'en' ? 'Unknown error' : '未知错误')
+            const latin = isLatinLocale(locale)
+            if (code === 400) setWarningDetail(latin ? '400 Request parameter error' : '400 请求参数错误')
+            else if (code === 401) setWarningDetail(latin ? '401 API key is invalid or expired' : '401 API 密钥无效或已过期')
+            else if (code === 403) setWarningDetail(latin ? '403 Insufficient permissions for this model' : '403 没有该模型的访问权限')
+            else if (code === 404) setWarningDetail(latin ? '404 Model or service not found' : '404 模型或服务不存在')
+            else if (code === 429) setWarningDetail(latin ? '429 Too many requests or quota exceeded' : '429 请求过于频繁或配额已用完')
+            else if (code >= 500) setWarningDetail(latin ? '500 Service temporarily unavailable' : '500 服务暂时不可用')
+            else setWarningDetail(latin ? 'Unknown error' : '未知错误')
           }}
         />
       )}
@@ -1137,8 +1225,8 @@ export default function HomePage() {
               <span className="text-3xl flex-shrink-0 mt-0.5">⚠️</span>
               <div>
                 <h4 className="text-base font-bold text-gray-800">
-                  {locale === 'en' ? 'Notice: ' : '提示：'}{warning.replace(/^⚠️\s*/, '')}
-                </h4>
+                {isLatinLocale(locale) ? 'Notice: ' : '提示：'}{warning.replace(/^⚠️\s*/, '')}
+              </h4>
                 {warningDetail && (
                   <p className="text-gray-500 text-sm mt-1">{warningDetail}</p>
                 )}
@@ -1150,7 +1238,7 @@ export default function HomePage() {
             <div className="flex justify-end mt-4">
               <button onClick={() => { setWarning(null); setCreateOpen(false); setCreateHidden(false) }}
                 className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-8 py-2.5 rounded-xl transition-colors text-sm">
-                {locale === 'en' ? 'OK' : '知道了'}
+                {isLatinLocale(locale) ? 'OK' : '知道了'}
               </button>
             </div>
           </div>
@@ -1167,21 +1255,21 @@ export default function HomePage() {
                 <span className="text-3xl">🗑️</span>
               </div>
               <h4 className="text-lg font-bold text-gray-800 mb-2">
-                {locale === 'en' ? 'Delete Picture Book?' : '确认删除绘本？'}
+                {isLatinLocale(locale) ? 'Delete Picture Book?' : '确认删除绘本？'}
               </h4>
               <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                {locale === 'en'
+                {isLatinLocale(locale)
                   ? `"${deleteTargetName}" will be permanently deleted. This action cannot be undone.`
                   : `绘本"${deleteTargetName}"将被永久删除，此操作无法撤销。`}
               </p>
               <div className="flex gap-3 w-full">
                 <button onClick={() => setDeleteConfirmOpen(false)}
                   className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors text-sm">
-                  {locale === 'en' ? 'Cancel' : '取消'}
+                  {isLatinLocale(locale) ? 'Cancel' : '取消'}
                 </button>
                 <button onClick={confirmDelete}
                   className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
-                  {locale === 'en' ? 'Delete' : '删除'}
+                  {isLatinLocale(locale) ? 'Delete' : '删除'}
                 </button>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { APIKeyView, LLMSettings } from '@/types'
+import { LANGUAGES, LANG_BY_CODE, pickVoiceForLang, type LangCode } from '@/lib/languages'
 import { useI18n } from '../i18n'
 import '../i18n/locales'
 
@@ -84,8 +85,20 @@ export default function AdminPage({
 
   // ── TTS Voices ──
   const [allVoices, setAllVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [selectedZhVoice, setSelectedZhVoice] = useState(() => localStorage.getItem('wstory_zh_voice') ?? '')
-  const [selectedEnVoice, setSelectedEnVoice] = useState(() => localStorage.getItem('wstory_en_voice') ?? '')
+  // 每个 LangCode 都有独立的 localStorage 键：wstory_<code>_voice
+  const [selectedVoices, setSelectedVoices] = useState<Record<LangCode, string>>(() => {
+    const out = {} as Record<LangCode, string>
+    for (const l of LANGUAGES) {
+      out[l.code] = localStorage.getItem(`wstory_${l.code}_voice`) ?? ''
+    }
+    return out
+  })
+
+  const setVoiceFor = (code: LangCode, name: string) => {
+    setSelectedVoices((prev) => ({ ...prev, [code]: name }))
+    if (name) localStorage.setItem(`wstory_${code}_voice`, name)
+    else localStorage.removeItem(`wstory_${code}_voice`)
+  }
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text })
@@ -210,8 +223,13 @@ export default function AdminPage({
     finally { setLlmSaving(false) }
   }
   const imageGenKeys = keys.filter((k) => k.supportsImageGen)
-  const zhVoices = allVoices.filter((v) => v.lang.startsWith('zh'))
-  const enVoices = allVoices.filter((v) => v.lang.startsWith('en'))
+  const voicesByLang: Record<LangCode, SpeechSynthesisVoice[]> = LANGUAGES.reduce(
+    (acc, l) => {
+      acc[l.code] = allVoices.filter((v) => v.lang.toLowerCase().startsWith(l.ttsPrefix))
+      return acc
+    },
+    {} as Record<LangCode, SpeechSynthesisVoice[]>,
+  )
 
   if (!open) return null
 
@@ -317,58 +335,52 @@ export default function AdminPage({
           <div className="space-y-5">
             <p className="text-xs text-gray-400">{t('admin.ttsHint')}</p>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.zhVoice')}</label>
-                {zhVoices.length === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">{t('admin.noZhVoice')}</p>
-                ) : (
-                  <div className="flex gap-2">
-                    <select value={selectedZhVoice}
-                      onChange={(e) => { setSelectedZhVoice(e.target.value); localStorage.setItem('wstory_zh_voice', e.target.value) }}
-                      className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                      <option value="">{t('admin.defaultVoice')}</option>
-                      {zhVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
-                    </select>
-                    <button type="button" onClick={() => {
-                      speechSynthesis.cancel()
-                      const voice = selectedZhVoice ? allVoices.find((v) => v.name === selectedZhVoice) ?? null : allVoices.find((v) => v.lang.startsWith('zh')) ?? null
-                      setTimeout(() => {
-                        const utt = new SpeechSynthesisUtterance('测试语音效果')
-                        utt.voice = voice; utt.rate = 0.9
-                        speechSynthesis.speak(utt)
-                      }, 100)
-                    }} className="flex-shrink-0 border border-purple-200 text-purple-600 hover:bg-purple-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap">
-                      {t('admin.testVoice')}
-                    </button>
+              {LANGUAGES.map((lang) => {
+                const voices = voicesByLang[lang.code] ?? []
+                const colorClass = lang.code === 'zh' ? 'purple' : lang.code === 'en' ? 'blue' : lang.code === 'ja' ? 'rose' : lang.code === 'ko' ? 'emerald' : 'amber'
+                const testPhrases: Record<LangCode, string> = {
+                  zh: '测试语音效果',
+                  en: 'Testing voice output',
+                  ja: 'テスト音声です',
+                  ko: '음성 테스트입니다',
+                  fr: 'Test de la voix',
+                }
+                return (
+                  <div key={lang.code}>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <span className="mr-1">{lang.flag}</span>
+                      {t(`admin.${lang.code}Voice`)}
+                      <span className="ml-2 text-xs text-gray-400 font-normal">{lang.labelNative}</span>
+                    </label>
+                    {voices.length === 0 ? (
+                      <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">{t(`admin.no${lang.code.charAt(0).toUpperCase() + lang.code.slice(1)}Voice`)}</p>
+                    ) : (
+                      <div className="flex gap-2">
+                        <select value={selectedVoices[lang.code] ?? ''}
+                          onChange={(e) => setVoiceFor(lang.code, e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                          <option value="">{t('admin.defaultVoice')}</option>
+                          {voices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                        </select>
+                        <button type="button" onClick={() => {
+                          speechSynthesis.cancel()
+                          const stored = selectedVoices[lang.code] ?? undefined
+                          const voice = stored
+                            ? allVoices.find((v) => v.name === stored) ?? pickVoiceForLang(allVoices, lang.code, stored)
+                            : pickVoiceForLang(allVoices, lang.code)
+                          setTimeout(() => {
+                            const utt = new SpeechSynthesisUtterance(testPhrases[lang.code])
+                            utt.voice = voice; utt.rate = 0.9
+                            speechSynthesis.speak(utt)
+                          }, 100)
+                        }} className={`flex-shrink-0 border border-${colorClass}-200 text-${colorClass}-600 hover:bg-${colorClass}-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap`}>
+                          {t('admin.testVoice')}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.enVoice')}</label>
-                {enVoices.length === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">{t('admin.noEnVoice')}</p>
-                ) : (
-                  <div className="flex gap-2">
-                    <select value={selectedEnVoice}
-                      onChange={(e) => { setSelectedEnVoice(e.target.value); localStorage.setItem('wstory_en_voice', e.target.value) }}
-                      className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                      <option value="">{t('admin.defaultVoice')}</option>
-                      {enVoices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
-                    </select>
-                    <button type="button" onClick={() => {
-                      speechSynthesis.cancel()
-                      const voice = selectedEnVoice ? allVoices.find((v) => v.name === selectedEnVoice) ?? null : allVoices.find((v) => v.lang.startsWith('en')) ?? null
-                      setTimeout(() => {
-                        const utt = new SpeechSynthesisUtterance('Testing voice output')
-                        utt.voice = voice; utt.rate = 0.9
-                        speechSynthesis.speak(utt)
-                      }, 100)
-                    }} className="flex-shrink-0 border border-blue-200 text-blue-600 hover:bg-blue-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap">
-                      {t('admin.testVoice')}
-                    </button>
-                  </div>
-                )}
-              </div>
+                )
+              })}
             </div>
           </div>
           )}

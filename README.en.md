@@ -60,7 +60,7 @@ npm run dev
 
 ```bash
 npm run build   # Build frontend → dist/client
-npm start       # Start API only (default :3002); for production, host static files from dist/client and reverse-proxy /api to this service
+npm start       # Start both API (:3002) and Vite frontend (:3001), same as npm run dev
 ```
 
 ---

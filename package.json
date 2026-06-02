@@ -8,7 +8,7 @@
     "server": "tsx watch server/index.ts",
     "client": "vite",
     "build": "vite build",
-    "start": "tsx server/index.ts"
+    "start": "concurrently -n \"http-api:3002,vite-web\" -c cyan,magenta \"tsx watch server/index.ts\" \"wait-on tcp:127.0.0.1:3002 && vite\""
   },
   "dependencies": {
     "cors": "^2.8.5",

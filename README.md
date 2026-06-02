@@ -62,7 +62,7 @@ npm run dev
 
 ```bash
 npm run build   # 构建前端 → dist/client
-npm start       # 仅启动 API（默认 :3002）；生产环境需自行托管 dist/client 中的静态文件并反代 /api 到本服务
+npm start       # 同时启动 API（:3002）和 Vite 前端（:3001），与 npm run dev 效果相同
 ```
 
 ---

@@ -5,6 +5,12 @@ import { ClaudeTextAdapter } from './claudeAdapter'
 const textAdapterRegistry: Record<string, new () => TextModelAdapter> = {
   openai: OpenAITextAdapter,
   deepseek: OpenAITextAdapter,
+  qwen: OpenAITextAdapter,
+  ernie: OpenAITextAdapter,
+  glm: OpenAITextAdapter,
+  moonshot: OpenAITextAdapter,
+  doubao: OpenAITextAdapter,
+  cmecloud: OpenAITextAdapter,
   claude: ClaudeTextAdapter,
 }
 

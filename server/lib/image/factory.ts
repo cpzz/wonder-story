@@ -4,6 +4,7 @@ import { OpenAIImageAdapter } from './openaiAdapter'
 
 const imageAdapterRegistry: Record<string, new () => ImageModelAdapter> = {
   qwen: QwenImageAdapter,
+  alibaba: QwenImageAdapter,
   openai: OpenAIImageAdapter,
 }
 

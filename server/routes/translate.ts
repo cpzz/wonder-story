@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { generateJSON } from '@/lib/llm'
+import { generateJSON } from '@/lib/textGeneration'
 import { getStylePrompt, getStyleName } from '@/lib/illustrationStyles'
 import type { Story, Guide, CharacterCard } from '@/types'
 

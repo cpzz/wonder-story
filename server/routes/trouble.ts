@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { generateJSON } from '@/lib/llm'
+import { generateJSON } from '@/lib/textGeneration'
 import { getPromptByType } from '@/lib/promptStore'
 import { fillTemplate } from '@/lib/templateUtils'
 import { DEFAULT_GUIDE_TEMPLATE, DEFAULT_BEDTIME_GUIDE_TEMPLATE, getLocalizedNameAndPrompts } from '@/lib/defaultPrompts'

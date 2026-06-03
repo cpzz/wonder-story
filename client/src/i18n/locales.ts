@@ -89,7 +89,7 @@ const homeZh = {
 
   // Home Page
   'home.appTitle': '童心事·绘本',
-  'home.settings': '系统设置',
+  'home.settings': '语言设置',
   'home.uiLang': '界面语言',
   'home.createNew': '创作新绘本',
   'home.noBooks': '还没有绘本',
@@ -240,7 +240,7 @@ const homeEn = {
   'create.themePlaceholder': 'Enter theme...',
 
   'home.appTitle': 'Wonder Story',
-  'home.settings': 'Settings',
+  'home.settings': 'Language Settings',
   'home.uiLang': 'Interface language',
   'home.createNew': 'Create New Book',
   'home.noBooks': 'No picture books yet',
@@ -318,7 +318,10 @@ const homeEn = {
 const adminZh = {
   'admin.title': '系统设置',
   'admin.tabLlm': '大模型配置',
-  'admin.tabTts': '朗读设置',
+  'admin.tabTts': '语言设置',
+  'admin.colBookLang': '绘本语言',
+  'admin.colVoice': '朗读语音',
+  'admin.colTest': '测试',
 
   // LLM tab
   'admin.storyModel': '故事生成模型',
@@ -359,6 +362,9 @@ const adminZh = {
 
   // TTS tab
   'admin.ttsHint': '在此选择朗读时使用的语音，选择会立即生效。语音列表由浏览器提供。',
+  'admin.bookLangsTitle': '绘本文字语言',
+  'admin.bookLangsHint': '勾选生成绘本时需要生成文字的语言；未勾选的语言不会生成、未勾选语言对应的朗读选项也会隐藏。',
+  'admin.bookLangsEmpty': '请至少选择一种语言',
   'admin.zhVoice': '中文语音',
   'admin.enVoice': '英文语音',
   'admin.jaVoice': '日语语音',
@@ -392,9 +398,12 @@ const adminZh = {
 }
 
 const adminEn = {
-  'admin.title': 'Settings',
+  'admin.title': 'Language Settings',
   'admin.tabLlm': 'LLM Config',
-  'admin.tabTts': 'Narration',
+  'admin.tabTts': 'Language',
+  'admin.colBookLang': 'Book Language',
+  'admin.colVoice': 'Narration Voice',
+  'admin.colTest': 'Test',
 
   'admin.storyModel': 'Story Model',
   'admin.pictureModel': 'Illustration Model',
@@ -431,6 +440,9 @@ const adminEn = {
   'admin.ok': 'OK',
 
   'admin.ttsHint': 'Select narration voices here. Changes take effect immediately. Voice list is provided by the browser.',
+  'admin.bookLangsTitle': 'Book Text Languages',
+  'admin.bookLangsHint': 'Pick the languages to generate book text in. Unchecked languages will not be generated, and their narration options will be hidden too.',
+  'admin.bookLangsEmpty': 'Please select at least one language',
   'admin.zhVoice': 'Chinese Voice',
   'admin.enVoice': 'English Voice',
   'admin.jaVoice': 'Japanese Voice',
@@ -612,7 +624,10 @@ const homeJa: Record<string, string> = {
 const adminJa: Record<string, string> = {
   'admin.title': 'システム設定',
   'admin.tabLlm': 'LLM設定',
-  'admin.tabTts': '読み上げ',
+  'admin.tabTts': '言語',
+  'admin.colBookLang': '絵本の言語',
+  'admin.colVoice': '読み上げ音声',
+  'admin.colTest': 'テスト',
 
   'admin.storyModel': '物語生成モデル',
   'admin.pictureModel': 'イラストモデル',
@@ -649,6 +664,9 @@ const adminJa: Record<string, string> = {
   'admin.ok': 'OK',
 
   'admin.ttsHint': '読み上げに使用する声を選択してください。設定はすぐに反映されます。声はブラウザから提供されます。',
+  'admin.bookLangsTitle': '絵本のテキスト言語',
+  'admin.bookLangsHint': '生成する絵本テキストの言語を選択してください。チェックされていない言語は生成されず、読み上げ選択肢も非表示になります。',
+  'admin.bookLangsEmpty': '少なくとも1つの言語を選択してください',
   'admin.zhVoice': '中国語の声',
   'admin.enVoice': '英語の声',
   'admin.jaVoice': '日本語の声',
@@ -830,7 +848,10 @@ const homeKo: Record<string, string> = {
 const adminKo: Record<string, string> = {
   'admin.title': '시스템 설정',
   'admin.tabLlm': 'LLM 설정',
-  'admin.tabTts': '읽어주기',
+  'admin.tabTts': '언어',
+  'admin.colBookLang': '그림책 언어',
+  'admin.colVoice': '읽어주기 음성',
+  'admin.colTest': '테스트',
 
   'admin.storyModel': '이야기 생성 모델',
   'admin.pictureModel': '일러스트 모델',
@@ -867,6 +888,9 @@ const adminKo: Record<string, string> = {
   'admin.ok': '확인',
 
   'admin.ttsHint': '읽어주기에 사용할 음성을 선택하세요. 변경 사항은 즉시 반영됩니다. 음성은 브라우저에서 제공됩니다.',
+  'admin.bookLangsTitle': '그림책 텍스트 언어',
+  'admin.bookLangsHint': '생성할 그림책 텍스트 언어를 선택하세요. 선택하지 않은 언어는 생성되지 않으며 해당 언어의 읽어주기 옵션도 숨겨집니다.',
+  'admin.bookLangsEmpty': '하나 이상의 언어를 선택해 주세요',
   'admin.zhVoice': '중국어 음성',
   'admin.enVoice': '영어 음성',
   'admin.jaVoice': '일본어 음성',
@@ -1048,7 +1072,10 @@ const homeFr: Record<string, string> = {
 const adminFr: Record<string, string> = {
   'admin.title': 'Paramètres',
   'admin.tabLlm': 'Config LLM',
-  'admin.tabTts': 'Narration',
+  'admin.tabTts': 'Langue',
+  'admin.colBookLang': 'Langue du livre',
+  'admin.colVoice': 'Voix de narration',
+  'admin.colTest': 'Tester',
 
   'admin.storyModel': "Modèle d'histoire",
   'admin.pictureModel': "Modèle d'illustration",
@@ -1085,6 +1112,9 @@ const adminFr: Record<string, string> = {
   'admin.ok': 'OK',
 
   'admin.ttsHint': "Choisissez les voix de narration ici. Les modifications sont immédiates. Les voix sont fournies par le navigateur.",
+  'admin.bookLangsTitle': 'Langues du texte du livre',
+  'admin.bookLangsHint': "Cochez les langues dans lesquelles générer le texte du livre. Les langues non cochées ne seront pas générées et leurs options de narration seront masquées.",
+  'admin.bookLangsEmpty': 'Veuillez sélectionner au moins une langue',
   'admin.zhVoice': 'Voix chinoise',
   'admin.enVoice': 'Voix anglaise',
   'admin.jaVoice': 'Voix japonaise',

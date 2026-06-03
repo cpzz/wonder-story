@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { generateJSON } from '@/lib/textGeneration'
 import { getStylePrompt, getStyleName } from '@/lib/illustrationStyles'
-import { LANGUAGES, LANG_CODES, type LangCode } from '@/lib/languages'
+import { LANGUAGES, LANG_BY_CODE, LANG_CODES, type LangCode } from '@/lib/languages'
 import type { Story, Guide, CharacterCard } from '@/types'
 
 const TRANSLATE_SYSTEM_BASE = `You are a professional children's book translator and illustrator.
@@ -100,20 +100,30 @@ const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { story, guide, characters = [], textLang, illustrationStyleId }: {
+    const { story, guide, characters = [], textLang, illustrationStyleId, bookLangs }: {
       story: Story
       guide: Guide
       characters?: CharacterCard[]
       textLang: string
       illustrationStyleId?: string
+      /** 用户在语言设置里勾选要生成的语言（不传则用全部非中文） */
+      bookLangs?: LangCode[]
     } = req.body
 
     const sortedPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
     const characterRef = buildCharacterRef(characters)
 
-    const targetLangList = LANGUAGES
-      .filter((l) => l.code !== 'zh')
-      .map((l) => `${l.translateName} (${langFieldFor(l.code)})`)
+    // 始终包含中文（源文）；其他目标语言按 bookLangs 过滤
+    const effectiveBookLangs: LangCode[] = (() => {
+      const requested = (bookLangs && bookLangs.length > 0 ? bookLangs : LANG_CODES.filter((c) => c !== 'zh'))
+      // 强制至少包含中文
+      const set = new Set<LangCode>(['zh', ...requested.filter((c) => c !== 'zh')])
+      return LANG_CODES.filter((c) => set.has(c))
+    })()
+
+    const targetLangs = effectiveBookLangs.filter((c) => c !== 'zh')
+    const targetLangList = targetLangs
+      .map((c) => `${LANG_BY_CODE[c].translateName} (${langFieldFor(c)})`)
       .join(', ')
 
     const input: BundleInput = {
@@ -135,8 +145,9 @@ router.post('/', async (req, res) => {
       },
     }
 
-    const userPrompt = `Translate the source "text" (Simplified Chinese) into each of the following target languages: ${targetLangList}.
-Fill in the matching ${langFieldFor(LANG_CODES.find((c) => c !== 'zh')!)}… fields, and also fill "imagePrompt" for the cover and every story page (English, vivid illustration description, ≤120 words each; ≤100 words for the cover).
+    const userPrompt = `Translate the source "text" (Simplified Chinese) into the following target languages ONLY: ${targetLangList || '(none — skip translation)'}.
+Leave any ${LANG_CODES.filter((c) => c !== 'zh' && !targetLangs.includes(c)).map((c) => `${langFieldFor(c)} (=${LANG_BY_CODE[c].translateName})`).join(', ') || 'text* fields'} blank (empty string) since the user did not request them.
+Fill in the matching ${targetLangs.map(langFieldFor).join(' / ') || 'text*'} fields, and also fill "imagePrompt" for the cover and every story page (English, vivid illustration description, ≤120 words each; ≤100 words for the cover).
 
 Character reference (strictly follow for every imagePrompt and cover.imagePrompt). [Image N / 图片N] = N-th character in the roster (see system rules). Use matching (image N) /（图片N）tags in prompts:
 ${characterRef}
@@ -147,7 +158,7 @@ ${characterRef}
 Return the completed JSON only:
 ${JSON.stringify(input, null, 2)}`
 
-    console.log(`[translate] calling LLM, pages: ${sortedPages.length} characters: ${characters.length} style: ${getStyleName(illustrationStyleId)}`)
+    console.log(`[translate] calling LLM, pages: ${sortedPages.length} characters: ${characters.length} style: ${getStyleName(illustrationStyleId)} bookLangs=[${effectiveBookLangs.join(',')}]`)
     const result = await generateJSON<BundleInput>(buildTranslateSystem(illustrationStyleId), userPrompt, 'story', 8192)
     console.log(
       '[translate] LLM returned cover textEn:',
@@ -157,24 +168,28 @@ ${JSON.stringify(input, null, 2)}`
     )
 
     const resultPages = [...(result.story?.pages ?? [])].sort((a, b) => a.pageNumber - b.pageNumber)
+    const textEn = (r: any) => targetLangs.includes('en') ? (r?.textEn?.trim() ?? '') : ''
+    const textJa = (r: any) => targetLangs.includes('ja') ? (r?.textJa?.trim() ?? '') : ''
+    const textKo = (r: any) => targetLangs.includes('ko') ? (r?.textKo?.trim() ?? '') : ''
+    const textFr = (r: any) => targetLangs.includes('fr') ? (r?.textFr?.trim() ?? '') : ''
 
     const translatedStory: Story = {
       cover: {
         text: story.cover.text,
-        textEn: result.cover?.textEn?.trim() ?? '',
-        textJa: result.cover?.textJa?.trim() ?? '',
-        textKo: result.cover?.textKo?.trim() ?? '',
-        textFr: result.cover?.textFr?.trim() ?? '',
+        textEn: textEn(result.cover),
+        textJa: textJa(result.cover),
+        textKo: textKo(result.cover),
+        textFr: textFr(result.cover),
         imagePrompt: result.cover?.imagePrompt?.trim() ?? '',
       },
       pages: sortedPages.map((p, i) => {
         const matched = resultPages.find((r) => r.pageNumber === p.pageNumber) ?? resultPages[i]
         return {
           ...p,
-          textEn: matched?.textEn?.trim() ?? '',
-          textJa: matched?.textJa?.trim() ?? '',
-          textKo: matched?.textKo?.trim() ?? '',
-          textFr: matched?.textFr?.trim() ?? '',
+          textEn: textEn(matched),
+          textJa: textJa(matched),
+          textKo: textKo(matched),
+          textFr: textFr(matched),
           imagePrompt: matched?.imagePrompt?.trim() ?? '',
         }
       }),
@@ -183,24 +198,24 @@ ${JSON.stringify(input, null, 2)}`
     const translatedGuide: Guide = {
       emotion: {
         text: guide.emotion.text,
-        textEn: result.guide?.emotion?.textEn?.trim() ?? '',
-        textJa: result.guide?.emotion?.textJa?.trim() ?? '',
-        textKo: result.guide?.emotion?.textKo?.trim() ?? '',
-        textFr: result.guide?.emotion?.textFr?.trim() ?? '',
+        textEn: textEn(result.guide?.emotion),
+        textJa: textJa(result.guide?.emotion),
+        textKo: textKo(result.guide?.emotion),
+        textFr: textFr(result.guide?.emotion),
       },
       message: {
         text: guide.message.text,
-        textEn: result.guide?.message?.textEn?.trim() ?? '',
-        textJa: result.guide?.message?.textJa?.trim() ?? '',
-        textKo: result.guide?.message?.textKo?.trim() ?? '',
-        textFr: result.guide?.message?.textFr?.trim() ?? '',
+        textEn: textEn(result.guide?.message),
+        textJa: textJa(result.guide?.message),
+        textKo: textKo(result.guide?.message),
+        textFr: textFr(result.guide?.message),
       },
       tips: {
         text: guide.tips.text,
-        textEn: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textEn?.trim() ?? ''),
-        textJa: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textJa?.trim() ?? ''),
-        textKo: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textKo?.trim() ?? ''),
-        textFr: guide.tips.text.map((_, i) => result.guide?.tips?.[i]?.textFr?.trim() ?? ''),
+        textEn: guide.tips.text.map((_, i) => textEn(result.guide?.tips?.[i])),
+        textJa: guide.tips.text.map((_, i) => textJa(result.guide?.tips?.[i])),
+        textKo: guide.tips.text.map((_, i) => textKo(result.guide?.tips?.[i])),
+        textFr: guide.tips.text.map((_, i) => textFr(result.guide?.tips?.[i])),
       },
     }
 
@@ -208,7 +223,6 @@ ${JSON.stringify(input, null, 2)}`
       `[translate] story: cover imagePrompt=${!!translatedStory.cover.imagePrompt}, pages=${translatedStory.pages.length}, emptyPrompts=${translatedStory.pages.filter((p) => !p.imagePrompt).length}`,
     )
 
-    // 始终返回完整的多语言数据
     res.json({ story: translatedStory, guide: translatedGuide })
   } catch (err) {
     console.error('[POST /api/translate]', err)

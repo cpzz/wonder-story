@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { BookItem, DropdownOptions, Guide, Story, APIKeyView, LLMSettings } from '@/types'
 import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
-import { LANGUAGES, LANG_BY_CODE, localizedFieldName, pickVoiceForLang, type LangCode } from '@/lib/languages'
+import { LANGUAGES, LANG_BY_CODE, localizedFieldName, pickVoiceForLang, getBookLangs, type LangCode } from '@/lib/languages'
 import { useI18n } from '../i18n'
 import '../i18n/locales'
 import AdminPage from './Admin'
@@ -251,6 +251,14 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
     setCoverImageFailed(false)
     setHasInteracted(false)
   }, [book.id, uiLocale]) // uiLocale 已是 LangCode；非 en 时落回中文
+
+  // 用户在「语言设置」里取消勾选了当前 voiceLang → 自动回退到首个选中的语言
+  useEffect(() => {
+    const bookLangs = getBookLangs()
+    if (voiceLang !== 'off' && !bookLangs.includes(voiceLang)) {
+      setVoiceLang(bookLangs[0] ?? 'zh')
+    }
+  }, [voiceLang])
 
   /** 从 LocalizedValue 风格的扁平字段中，按当前 voiceLang 取出文本 */
   const getText = useCallback((fields: Record<string, string | undefined> | undefined): string => {
@@ -515,7 +523,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
             </button>
             {voiceMenuOpen && (
               <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 min-w-[140px]">
-                {LANGUAGES.map((l) => {
+                {LANGUAGES.filter((l) => getBookLangs().includes(l.code)).map((l) => {
                   const active = voiceLang === l.code
                   return (
                     <button key={l.code} type="button"
@@ -649,7 +657,7 @@ function CreateModal({ open, hidden, onClose, options, onOptionsChange, onCreate
       // ③ 正在生成故事内容（翻译 + 插画描述）...
       setGenStep(t('create.step.generatingContent'))
       console.log('[generate] ③ 正在生成故事内容 ...')
-      const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang, illustrationStyleId: styleId }) })
+      const transRes = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story, guide, characters, textLang, illustrationStyleId: styleId, bookLangs: getBookLangs() }) })
       if (!transRes.ok) throw new Error(await parseApiError(transRes))
       const translated = await transRes.json()
       story = translated.story

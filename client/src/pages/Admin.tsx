@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { APIKeyView, LLMSettings } from '@/types'
-import { LANGUAGES, LANG_BY_CODE, pickVoiceForLang, type LangCode } from '@/lib/languages'
+import { LANGUAGES, LANG_BY_CODE, pickVoiceForLang, getBookLangs, setBookLangs, type LangCode } from '@/lib/languages'
 import { useI18n } from '../i18n'
 import '../i18n/locales'
 
@@ -94,6 +94,21 @@ export default function AdminPage({
     return out
   })
 
+  // ── 绘本文字语言偏好（多选） ──
+  // 持久化在 wstory_book_langs；至少 1 项；默认 ['zh','en']
+  const [bookLangs, setBookLangsState] = useState<LangCode[]>(() => getBookLangs())
+  const toggleBookLang = (code: LangCode) => {
+    setBookLangsState((prev) => {
+      const has = prev.includes(code)
+      if (has) {
+        // 至少保留 1 项
+        if (prev.length <= 1) return prev
+        return prev.filter((c) => c !== code)
+      }
+      return [...prev, code]
+    })
+  }
+
   const setVoiceFor = (code: LangCode, name: string) => {
     setSelectedVoices((prev) => ({ ...prev, [code]: name }))
     if (name) localStorage.setItem(`wstory_${code}_voice`, name)
@@ -119,6 +134,9 @@ export default function AdminPage({
     speechSynthesis.addEventListener('voiceschanged', load)
     return () => speechSynthesis.removeEventListener('voiceschanged', load)
   }, [])
+
+  // bookLangs 变更时同步到 localStorage
+  useEffect(() => { setBookLangs(bookLangs) }, [bookLangs])
 
   // ── API Key handlers ──
   const openAddKey = () => { setEditingKey(null); setForm(EMPTY_FORM); setKeyModalOpen(true) }
@@ -333,54 +351,83 @@ export default function AdminPage({
 
           {adminTab === 'tts' && (
           <div className="space-y-5">
-            <p className="text-xs text-gray-400">{t('admin.ttsHint')}</p>
-            <div className="space-y-4">
-              {LANGUAGES.map((lang) => {
-                const voices = voicesByLang[lang.code] ?? []
-                const colorClass = lang.code === 'zh' ? 'purple' : lang.code === 'en' ? 'blue' : lang.code === 'ja' ? 'rose' : lang.code === 'ko' ? 'emerald' : 'amber'
-                const testPhrases: Record<LangCode, string> = {
-                  zh: '测试语音效果',
-                  en: 'Testing voice output',
-                  ja: 'テスト音声です',
-                  ko: '음성 테스트입니다',
-                  fr: 'Test de la voix',
-                }
-                return (
-                  <div key={lang.code}>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      <span className="mr-1">{lang.flag}</span>
-                      {t(`admin.${lang.code}Voice`)}
-                      <span className="ml-2 text-xs text-gray-400 font-normal">{lang.labelNative}</span>
-                    </label>
-                    {voices.length === 0 ? (
-                      <p className="text-sm text-gray-400 bg-gray-50 rounded-xl px-4 py-3">{t(`admin.no${lang.code.charAt(0).toUpperCase() + lang.code.slice(1)}Voice`)}</p>
-                    ) : (
-                      <div className="flex gap-2">
-                        <select value={selectedVoices[lang.code] ?? ''}
-                          onChange={(e) => setVoiceFor(lang.code, e.target.value)}
-                          className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
-                          <option value="">{t('admin.defaultVoice')}</option>
-                          {voices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
-                        </select>
-                        <button type="button" onClick={() => {
-                          speechSynthesis.cancel()
-                          const stored = selectedVoices[lang.code] ?? undefined
-                          const voice = stored
-                            ? allVoices.find((v) => v.name === stored) ?? pickVoiceForLang(allVoices, lang.code, stored)
-                            : pickVoiceForLang(allVoices, lang.code)
-                          setTimeout(() => {
-                            const utt = new SpeechSynthesisUtterance(testPhrases[lang.code])
-                            utt.voice = voice; utt.rate = 0.9
-                            speechSynthesis.speak(utt)
-                          }, 100)
-                        }} className={`flex-shrink-0 border border-${colorClass}-200 text-${colorClass}-600 hover:bg-${colorClass}-50 text-sm px-4 py-3 rounded-xl transition-colors whitespace-nowrap`}>
-                          {t('admin.testVoice')}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+            <p className="text-xs text-gray-500 leading-relaxed">{t('admin.bookLangsHint')}</p>
+            <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold w-12">
+                      <span className="sr-only">{t('admin.colBookLang')}</span>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold">{t('admin.colBookLang')}</th>
+                    <th className="px-4 py-3 text-left font-semibold">{t('admin.colVoice')}</th>
+                    <th className="px-4 py-3 text-center font-semibold w-20">{t('admin.colTest')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {LANGUAGES.map((lang) => {
+                    const voices = voicesByLang[lang.code] ?? []
+                    const checked = bookLangs.includes(lang.code)
+                    const isLastChecked = checked && bookLangs.length === 1
+                    const currentVoiceName = selectedVoices[lang.code] ?? ''
+                    const testPhrases: Record<LangCode, string> = {
+                      zh: '测试语音效果',
+                      en: 'Testing voice output',
+                      ja: 'テスト音声です',
+                      ko: '음성 테스트입니다',
+                      fr: 'Test de la voix',
+                    }
+                    return (
+                      <tr key={lang.code} className={checked ? '' : 'opacity-60'}>
+                        {/* 列1：复选框 — 选中后才生成该语言文字、朗读下拉才显示 */}
+                        <td className="px-4 py-3 align-middle">
+                          <input type="checkbox" checked={checked} disabled={isLastChecked}
+                            onChange={() => toggleBookLang(lang.code)}
+                            className="w-4 h-4 accent-purple-600 cursor-pointer disabled:cursor-not-allowed"
+                            title={t('admin.colBookLang')} />
+                        </td>
+                        {/* 列2：语言名 */}
+                        <td className="px-4 py-3 align-middle font-semibold text-gray-800">
+                          {lang.labelNative}
+                        </td>
+                        {/* 列3：该语言的语音下拉（单选） */}
+                        <td className="px-4 py-3 align-middle">
+                          {voices.length === 0 ? (
+                            <span className="text-xs text-gray-400">{t(`admin.no${lang.fieldSuffix || 'Zh'}Voice`)}</span>
+                          ) : (
+                            <select value={currentVoiceName}
+                              onChange={(e) => setVoiceFor(lang.code, e.target.value)}
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white">
+                              <option value="">{t('admin.defaultVoice')}</option>
+                              {voices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                            </select>
+                          )}
+                        </td>
+                        {/* 列4：测试按钮 — 测试本行当前选中的语音 */}
+                        <td className="px-4 py-3 align-middle text-center">
+                          <button type="button" disabled={voices.length === 0}
+                            onClick={() => {
+                              speechSynthesis.cancel()
+                              const stored = currentVoiceName || undefined
+                              const voice = stored
+                                ? allVoices.find((v) => v.name === stored) ?? pickVoiceForLang(allVoices, lang.code, stored)
+                                : pickVoiceForLang(allVoices, lang.code)
+                              setTimeout(() => {
+                                const utt = new SpeechSynthesisUtterance(testPhrases[lang.code])
+                                utt.voice = voice; utt.rate = 0.9
+                                speechSynthesis.speak(utt)
+                              }, 100)
+                            }}
+                            title={t('admin.testVoice')}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-purple-200 text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
           )}

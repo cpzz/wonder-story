@@ -91,3 +91,39 @@ export function pickVoiceForLang(
   if (exactPrefix) return exactPrefix
   return voices.find((v) => v.lang.toLowerCase().startsWith(prefix.toLowerCase())) ?? null
 }
+
+// ── 绘本文字语言偏好（localStorage 持久化） ──
+//
+// 用户在「语言设置」里勾选要生成的语言，未勾选的语言：
+//   1. translate.ts 不会让 LLM 翻译（节省 token + 加快生成）
+//   2. BookReader 朗读下拉里不显示
+// 至少要勾选 1 种；默认 ['zh', 'en']。
+// 注意：这是客户端设置（仅决定是否生成/显示），不影响已存在的 BookItem 数据。
+
+const BOOK_LANGS_KEY = 'wstory_book_langs'
+export const DEFAULT_BOOK_LANGS: LangCode[] = ['zh', 'en']
+
+/** 读取绘本文字语言偏好；非法或空值回退到默认 ['zh','en'] */
+export function getBookLangs(): LangCode[] {
+  if (typeof localStorage === 'undefined') return DEFAULT_BOOK_LANGS
+  try {
+    const raw = localStorage.getItem(BOOK_LANGS_KEY)
+    if (!raw) return DEFAULT_BOOK_LANGS
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return DEFAULT_BOOK_LANGS
+    const valid = arr.filter((c): c is LangCode =>
+      typeof c === 'string' && c in LANG_BY_CODE
+    )
+    return valid.length > 0 ? valid : DEFAULT_BOOK_LANGS
+  } catch {
+    return DEFAULT_BOOK_LANGS
+  }
+}
+
+/** 写入绘本文字语言偏好（已校验；非空数组才落盘） */
+export function setBookLangs(langs: LangCode[]): void {
+  if (typeof localStorage === 'undefined') return
+  const valid = langs.filter((c): c is LangCode => c in LANG_BY_CODE)
+  if (valid.length === 0) return
+  localStorage.setItem(BOOK_LANGS_KEY, JSON.stringify(valid))
+}

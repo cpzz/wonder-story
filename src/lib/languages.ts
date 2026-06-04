@@ -24,14 +24,72 @@ export interface LanguageDef {
   nativeName: string
   /** 数据模型中除 zh/en 外对应的字段名后缀（首字母大写），例如 Ja/Ko/Fr */
   fieldSuffix: string
+  /**
+   * 按当前 UI 语言显示的语言名。
+   * UI 是中文 → 显示"中文/英文/日文/韩文/法文"
+   * UI 是英文 → 显示"Chinese/English/Japanese/Korean/French"
+   * 其它 UI 语言同理。
+   * UI 语言不在映射中时回退到 labelNative。
+   */
+  i18nLabel: Record<LangCode, string>
 }
 
 export const LANGUAGES: LanguageDef[] = [
-  { code: 'zh', label: '中文',      labelNative: '中文',     flag: '🇨🇳', ttsPrefix: 'zh', translateName: 'Chinese (Simplified)', nativeName: '简体中文', fieldSuffix: '' },
-  { code: 'en', label: '英语',      labelNative: 'English',  flag: '🇺🇸', ttsPrefix: 'en', translateName: 'English',              nativeName: 'English',  fieldSuffix: 'En' },
-  { code: 'ja', label: '日语',      labelNative: '日本語',   flag: '🇯🇵', ttsPrefix: 'ja', translateName: 'Japanese',             nativeName: '日本語',   fieldSuffix: 'Ja' },
-  { code: 'ko', label: '韩语',      labelNative: '한국어',   flag: '🇰🇷', ttsPrefix: 'ko', translateName: 'Korean',               nativeName: '한국어',   fieldSuffix: 'Ko' },
-  { code: 'fr', label: '法语',      labelNative: 'Français', flag: '🇫🇷', ttsPrefix: 'fr', translateName: 'French',               nativeName: 'Français', fieldSuffix: 'Fr' },
+  {
+    code: 'zh',
+    label: '中文',
+    labelNative: '中文',
+    flag: '🇨🇳',
+    ttsPrefix: 'zh',
+    translateName: 'Chinese (Simplified)',
+    nativeName: '简体中文',
+    fieldSuffix: '',
+    i18nLabel: { zh: '中文', en: 'Chinese',  ja: '中国語',   ko: '중국어',   fr: 'Chinois'    },
+  },
+  {
+    code: 'en',
+    label: '英语',
+    labelNative: 'English',
+    flag: '🇺🇸',
+    ttsPrefix: 'en',
+    translateName: 'English',
+    nativeName: 'English',
+    fieldSuffix: 'En',
+    i18nLabel: { zh: '英文', en: 'English',  ja: '英語',     ko: '영어',     fr: 'Anglais'    },
+  },
+  {
+    code: 'ja',
+    label: '日语',
+    labelNative: '日本語',
+    flag: '🇯🇵',
+    ttsPrefix: 'ja',
+    translateName: 'Japanese',
+    nativeName: '日本語',
+    fieldSuffix: 'Ja',
+    i18nLabel: { zh: '日文', en: 'Japanese', ja: '日本語',   ko: '일본어',   fr: 'Japonais'   },
+  },
+  {
+    code: 'ko',
+    label: '韩语',
+    labelNative: '한국어',
+    flag: '🇰🇷',
+    ttsPrefix: 'ko',
+    translateName: 'Korean',
+    nativeName: '한국어',
+    fieldSuffix: 'Ko',
+    i18nLabel: { zh: '韩文', en: 'Korean',   ja: '韓国語',   ko: '한국어',   fr: 'Coréen'     },
+  },
+  {
+    code: 'fr',
+    label: '法语',
+    labelNative: 'Français',
+    flag: '🇫🇷',
+    ttsPrefix: 'fr',
+    translateName: 'French',
+    nativeName: 'Français',
+    fieldSuffix: 'Fr',
+    i18nLabel: { zh: '法文', en: 'French',   ja: 'フランス語', ko: '프랑스어', fr: 'Français'  },
+  },
 ]
 
 export const LANG_CODES: LangCode[] = LANGUAGES.map((l) => l.code)

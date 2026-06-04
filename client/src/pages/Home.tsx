@@ -515,7 +515,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
               <span>
                 {voiceLang === 'off'
                   ? `🔇 ${t('reader.voiceOff')}`
-                  : LANG_BY_CODE[voiceLang].labelNative}
+                  : LANG_BY_CODE[voiceLang].i18nLabel[uiLocale]}
               </span>
               <svg className={`w-3 h-3 transition-transform ${voiceMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -529,7 +529,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
                     <button key={l.code} type="button"
                       onClick={() => { setVoiceLang(l.code); setVoiceMenuOpen(false) }}
                       className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${active ? 'bg-purple-50 text-purple-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}>
-                      {l.labelNative}
+                      {l.i18nLabel[uiLocale]}
                     </button>
                   )
                 })}

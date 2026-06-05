@@ -32,14 +32,14 @@ export function normalizeBookItem(book: BookItem): BookItem {
   if (s.cover && typeof s.cover.text === 'string') {
     cover = {
       text: s.cover.text,
-      textEn: s.cover.textEn,
+      ...(s.cover as Record<string, string | undefined>),
       imagePrompt: s.cover.imagePrompt ?? pb?.coverPrompt,
     }
   } else {
     const t = s.title ?? book.title
     cover = {
       text: t?.text ?? '',
-      textEn: t?.textEn,
+      ...(t as Record<string, string | undefined>),
       imagePrompt: pb?.coverPrompt,
     }
   }
@@ -48,7 +48,7 @@ export function normalizeBookItem(book: BookItem): BookItem {
     const fromPb = pb?.pages?.find((pp) => pp.pageNumber === p.pageNumber)
     return {
       ...p,
-      textEn: p.textEn ?? fromPb?.textEn,
+      ...(fromPb as Record<string, string | undefined> | undefined),
       imagePrompt: p.imagePrompt ?? fromPb?.imagePrompt,
     }
   })
@@ -56,7 +56,7 @@ export function normalizeBookItem(book: BookItem): BookItem {
   const { pictureBook: _drop, ...rest } = raw as BookItem & { pictureBook?: LegacyPb }
   return {
     ...rest,
-    title: { text: cover.text, textEn: cover.textEn },
+    title: { text: cover.text, ...(cover as Record<string, string | undefined>) },
     story: { cover, pages },
   }
 }

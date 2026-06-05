@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { getBooks, getBookById, saveBook, deleteBook, getImagePath, getRefImagePath } from '@/lib/booksStore'
+import { LANG_CODES, LANG_BY_CODE } from '@/lib/languages'
 import type { BookItem } from '@/types'
 
 const router = Router()
@@ -31,10 +32,7 @@ router.post('/', (req, res) => {
     const book: BookItem = saveBook({
       title: {
         text: story.cover.text,
-        textEn: story.cover.textEn,
-        textJa: story.cover.textJa,
-        textKo: story.cover.textKo,
-        textFr: story.cover.textFr,
+        ...Object.fromEntries(LANG_CODES.filter((c) => c !== 'zh').map((c) => [`text${LANG_BY_CODE[c].fieldSuffix}`, (story.cover as Record<string, string | undefined>)[`text${LANG_BY_CODE[c].fieldSuffix}`]])),
       },
       emotion: emotion ?? '',
       scene: scene ?? '',

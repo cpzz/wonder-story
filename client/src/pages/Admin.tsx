@@ -75,12 +75,20 @@ export default function AdminPage({
   }))
   const [llmSaving, setLlmSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const baselineRef = useRef<{ llm: LLMSettings; keysSig: string }>({
+  const baselineRef = useRef<{ llm: LLMSettings; keysSig: string; bookLangs: LangCode[]; voicesSig: string }>({
     llm: {
       storyLLMId: initialLlm.storyLLMId,
       pictureLLMId: initialLlm.pictureLLMId ?? '',
     },
     keysSig: keysSnapshot(initialKeys.map((k) => ({ ...k }))),
+    bookLangs: getBookLangs(),
+    voicesSig: JSON.stringify(
+      (() => {
+        const out: Record<LangCode, string> = {} as Record<LangCode, string>
+        for (const l of LANGUAGES) out[l.code] = localStorage.getItem(`wstory_${l.code}_voice`) ?? ''
+        return out
+      })()
+    ),
   })
 
   // ── TTS Voices ──
@@ -111,8 +119,6 @@ export default function AdminPage({
 
   const setVoiceFor = (code: LangCode, name: string) => {
     setSelectedVoices((prev) => ({ ...prev, [code]: name }))
-    if (name) localStorage.setItem(`wstory_${code}_voice`, name)
-    else localStorage.removeItem(`wstory_${code}_voice`)
   }
 
   const showMsg = (type: 'success' | 'error', text: string) => {
@@ -120,13 +126,17 @@ export default function AdminPage({
     setTimeout(() => setMessage(null), 3000)
   }
 
+  // bookLangs / voices 变更 → 仅设 dirty，不直接写 localStorage
+  const voicesSigNow = () => JSON.stringify(selectedVoices)
   useEffect(() => {
     if (!open) return
     const b = baselineRef.current
     const llmDirty = llm.storyLLMId !== b.llm.storyLLMId || llm.pictureLLMId !== b.llm.pictureLLMId
     const keysDirty = keysSnapshot(keys) !== b.keysSig
-    setDirty(llmDirty || keysDirty)
-  }, [open, keys, llm])
+    const bookLangsDirty = JSON.stringify(bookLangs) !== JSON.stringify(b.bookLangs)
+    const voicesDirty = voicesSigNow() !== b.voicesSig
+    setDirty(llmDirty || keysDirty || bookLangsDirty || voicesDirty)
+  }, [open, keys, llm, bookLangs, selectedVoices])
 
   useEffect(() => {
     const load = () => setAllVoices(speechSynthesis.getVoices())
@@ -135,8 +145,7 @@ export default function AdminPage({
     return () => speechSynthesis.removeEventListener('voiceschanged', load)
   }, [])
 
-  // bookLangs 变更时同步到 localStorage
-  useEffect(() => { setBookLangs(bookLangs) }, [bookLangs])
+  // 去掉旧的 bookLangs 自动保存 useEffect
 
   // ── API Key handlers ──
   const openAddKey = () => { setEditingKey(null); setForm(EMPTY_FORM); setKeyModalOpen(true) }
@@ -233,7 +242,19 @@ export default function AdminPage({
         throw new Error(errMsg)
       }
       if (baselineRef.current) {
-        baselineRef.current = { llm: { ...llm }, keysSig: keysSnapshot(keys) }
+        baselineRef.current = {
+          llm: { ...llm },
+          keysSig: keysSnapshot(keys),
+          bookLangs: [...bookLangs],
+          voicesSig: JSON.stringify(selectedVoices),
+        }
+        // 保存 bookLangs 和 voice 选择到 localStorage
+        setBookLangs(bookLangs)
+        for (const l of LANGUAGES) {
+          const v = selectedVoices[l.code]
+          if (v) localStorage.setItem(`wstory_${l.code}_voice`, v)
+          else localStorage.removeItem(`wstory_${l.code}_voice`)
+        }
       }
       setDirty(false)
       onClose()
@@ -377,6 +398,19 @@ export default function AdminPage({
                         ja: 'テスト音声です',
                         ko: '음성 테스트입니다',
                         fr: 'Test de la voix',
+                        fi: 'Testataan ääntä',
+                        es: 'Probando la voz',
+                        pt: 'Testando a voz',
+                        de: 'Teste die Stimme',
+                        pl: 'Testowanie głosu',
+                        it: 'Test della voce',
+                        ar: 'اختبار الصوت',
+                        da: 'Test af lyden',
+                        hi: 'आवाज़ का परीक्षण',
+                        th: 'ทดสอบเสียง',
+                        ru: 'Тестирование голоса',
+                        el: 'Δοκιμή φωνής',
+                        ms: 'Ujian suara',
                       }
                       return (
                         <tr key={lang.code} className={checked ? '' : 'opacity-60'}>

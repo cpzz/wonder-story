@@ -6,21 +6,23 @@ export type Locale = LangCode
 
 type TranslationMap = Record<string, string>
 
-/** 所有 5 种 UI 语言的翻译表。zh/en 由 registerTranslations 注入；ja/ko/fr 暂留空，
+/** 所有 18 种 UI 语言的翻译表。zh/en 由 registerTranslations 注入；其余暂留空，
  *  t() 会按 fallback 链 locale → 'en' → 'zh' → key 自动回退。
- *  未来要加日文/韩文/法文 UI 文案，只需要在 locales.ts 里再 register 一次即可。 */
+ *  未来要加更多 UI 文案，只需要在 locales.ts 里再 register 一次即可。 */
 const translations: Record<Locale, TranslationMap> = {
-  zh: {},
-  en: {},
-  ja: {},
-  ko: {},
-  fr: {},
+  zh: {}, en: {}, ja: {}, ko: {}, fr: {},
+  fi: {}, es: {}, pt: {}, de: {}, pl: {},
+  it: {}, ar: {}, da: {}, hi: {},
+  th: {}, ru: {}, el: {}, ms: {},
 }
 
 // ── Register translations ──
 
 const _maps: Record<Locale, TranslationMap> = {
   zh: {}, en: {}, ja: {}, ko: {}, fr: {},
+  fi: {}, es: {}, pt: {}, de: {}, pl: {},
+  it: {}, ar: {}, da: {}, hi: {},
+  th: {}, ru: {}, el: {}, ms: {},
 }
 
 /** 注册每种语言的翻译。5 种语言可独立注册；未注册的语言走 fallback 链。 */

@@ -375,6 +375,19 @@ const adminZh = {
   'admin.noJaVoice': '未检测到日语语音',
   'admin.noKoVoice': '未检测到韩语语音',
   'admin.noFrVoice': '未检测到法语语音',
+  'admin.noFiVoice': '未检测到芬兰语语音',
+  'admin.noEsVoice': '未检测到西班牙语语音',
+  'admin.noPtVoice': '未检测到葡萄牙语语音',
+  'admin.noDeVoice': '未检测到德语语音',
+  'admin.noPlVoice': '未检测到波兰语语音',
+  'admin.noItVoice': '未检测到意大利语语音',
+  'admin.noArVoice': '未检测到阿拉伯语语音',
+  'admin.noDaVoice': '未检测到丹麦语语音',
+  'admin.noHiVoice': '未检测到印地语语音',
+  'admin.noThVoice': '未检测到泰语语音',
+  'admin.noRuVoice': '未检测到俄语语音',
+  'admin.noElVoice': '未检测到希腊语语音',
+  'admin.noMsVoice': '未检测到马来语语音',
   'admin.defaultVoice': '-- 使用默认 --',
   'admin.testVoice': '▶ 测试语音',
 
@@ -453,6 +466,19 @@ const adminEn = {
   'admin.noJaVoice': 'No Japanese voices detected',
   'admin.noKoVoice': 'No Korean voices detected',
   'admin.noFrVoice': 'No French voices detected',
+  'admin.noFiVoice': 'No Finnish voices detected',
+  'admin.noEsVoice': 'No Spanish voices detected',
+  'admin.noPtVoice': 'No Portuguese voices detected',
+  'admin.noDeVoice': 'No German voices detected',
+  'admin.noPlVoice': 'No Polish voices detected',
+  'admin.noItVoice': 'No Italian voices detected',
+  'admin.noArVoice': 'No Arabic voices detected',
+  'admin.noDaVoice': 'No Danish voices detected',
+  'admin.noHiVoice': 'No Hindi voices detected',
+  'admin.noThVoice': 'No Thai voices detected',
+  'admin.noRuVoice': 'No Russian voices detected',
+  'admin.noElVoice': 'No Greek voices detected',
+  'admin.noMsVoice': 'No Malay voices detected',
   'admin.defaultVoice': '-- Use default --',
   'admin.testVoice': '▶ Test Voice',
 
@@ -677,6 +703,19 @@ const adminJa: Record<string, string> = {
   'admin.noJaVoice': '日本語の声が検出されませんでした',
   'admin.noKoVoice': '韓国語の声が検出されませんでした',
   'admin.noFrVoice': 'フランス語の声が検出されませんでした',
+  'admin.noFiVoice': 'フィンランド語の声が検出されませんでした',
+  'admin.noEsVoice': 'スペイン語の声が検出されませんでした',
+  'admin.noPtVoice': 'ポルトガル語の声が検出されませんでした',
+  'admin.noDeVoice': 'ドイツ語の声が検出されませんでした',
+  'admin.noPlVoice': 'ポーランド語の声が検出されませんでした',
+  'admin.noItVoice': 'イタリア語の声が検出されませんでした',
+  'admin.noArVoice': 'アラビア語の声が検出されませんでした',
+  'admin.noDaVoice': 'デンマーク語の声が検出されませんでした',
+  'admin.noHiVoice': 'ヒンディー語の声が検出されませんでした',
+  'admin.noThVoice': 'タイ語の声が検出されませんでした',
+  'admin.noRuVoice': 'ロシア語の声が検出されませんでした',
+  'admin.noElVoice': 'ギリシャ語の声が検出されませんでした',
+  'admin.noMsVoice': 'マレー語の声が検出されませんでした',
   'admin.defaultVoice': '-- デフォルトを使う --',
   'admin.testVoice': '▶ 音声テスト',
 
@@ -901,6 +940,19 @@ const adminKo: Record<string, string> = {
   'admin.noJaVoice': '일본어 음성이 감지되지 않았습니다',
   'admin.noKoVoice': '한국어 음성이 감지되지 않았습니다',
   'admin.noFrVoice': '프랑스어 음성이 감지되지 않았습니다',
+  'admin.noFiVoice': '핀란드어 음성이 감지되지 않았습니다',
+  'admin.noEsVoice': '스페인어 음성이 감지되지 않았습니다',
+  'admin.noPtVoice': '포르투갈어 음성이 감지되지 않았습니다',
+  'admin.noDeVoice': '독일어 음성이 감지되지 않았습니다',
+  'admin.noPlVoice': '폴란드어 음성이 감지되지 않았습니다',
+  'admin.noItVoice': '이탈리아어 음성이 감지되지 않았습니다',
+  'admin.noArVoice': '아랍어 음성이 감지되지 않았습니다',
+  'admin.noDaVoice': '덴마크어 음성이 감지되지 않았습니다',
+  'admin.noHiVoice': '힌두어 음성이 감지되지 않았습니다',
+  'admin.noThVoice': '태국어 음성이 감지되지 않았습니다',
+  'admin.noRuVoice': '러시아어 음성이 감지되지 않았습니다',
+  'admin.noElVoice': '그리스어 음성이 감지되지 않았습니다',
+  'admin.noMsVoice': '말레이어 음성이 감지되지 않았습니다',
   'admin.defaultVoice': '-- 기본값 사용 --',
   'admin.testVoice': '▶ 음성 테스트',
 
@@ -1125,6 +1177,19 @@ const adminFr: Record<string, string> = {
   'admin.noJaVoice': 'Aucune voix japonaise détectée',
   'admin.noKoVoice': 'Aucune voix coréenne détectée',
   'admin.noFrVoice': 'Aucune voix française détectée',
+  'admin.noFiVoice': 'Aucune voix finnoise détectée',
+  'admin.noEsVoice': 'Aucune voix espagnole détectée',
+  'admin.noPtVoice': 'Aucune voix portugaise détectée',
+  'admin.noDeVoice': 'Aucune voix allemande détectée',
+  'admin.noPlVoice': 'Aucune voix polonaise détectée',
+  'admin.noItVoice': 'Aucune voix italienne détectée',
+  'admin.noArVoice': 'Aucune voix arabe détectée',
+  'admin.noDaVoice': 'Aucune voix danoise détectée',
+  'admin.noHiVoice': 'Aucune voix hindi détectée',
+  'admin.noThVoice': 'Aucune voix thaïlandaise détectée',
+  'admin.noRuVoice': 'Aucune voix russe détectée',
+  'admin.noElVoice': 'Aucune voix grecque détectée',
+  'admin.noMsVoice': 'Aucune voix malaise détectée',
   'admin.defaultVoice': '-- Par défaut --',
   'admin.testVoice': '▶ Tester la voix',
 
@@ -1145,5 +1210,48 @@ const adminFr: Record<string, string> = {
   'admin.provider.cmecloud': 'CMCC Cloud (cmecloud)',
 }
 
-registerTranslations({ zh: homeZh, en: homeEn, ja: homeJa, ko: homeKo, fr: homeFr })
-registerTranslations({ zh: adminZh, en: adminEn, ja: adminJa, ko: adminKo, fr: adminFr })
+// ── UI 文案占位（14 种 UI 语言） ──
+// 已有 5 种语言（zh/en/ja/ko/fr）填了完整 UI 文案。下方 9 种新语言（fi/es/pt/de/pl/it/ar/da/hi）
+// 暂留空，t() 会自动按 fallback 链 locale → en → zh 回退。需要填哪国 UI 文案，
+// 直接在这些对象里加 key 即可，registerTranslations 会自动覆盖。
+
+const homeFi: Record<string, string> = {}
+const homeEs: Record<string, string> = {}
+const homePt: Record<string, string> = {}
+const homeDe: Record<string, string> = {}
+const homePl: Record<string, string> = {}
+const homeIt: Record<string, string> = {}
+const homeAr: Record<string, string> = {}
+const homeDa: Record<string, string> = {}
+const homeHi: Record<string, string> = {}
+const homeTh: Record<string, string> = {}
+const homeRu: Record<string, string> = {}
+const homeEl: Record<string, string> = {}
+const homeMs: Record<string, string> = {}
+
+const adminFi: Record<string, string> = {}
+const adminEs: Record<string, string> = {}
+const adminPt: Record<string, string> = {}
+const adminDe: Record<string, string> = {}
+const adminPl: Record<string, string> = {}
+const adminIt: Record<string, string> = {}
+const adminAr: Record<string, string> = {}
+const adminDa: Record<string, string> = {}
+const adminHi: Record<string, string> = {}
+const adminTh: Record<string, string> = {}
+const adminRu: Record<string, string> = {}
+const adminEl: Record<string, string> = {}
+const adminMs: Record<string, string> = {}
+
+registerTranslations({
+  zh: homeZh, en: homeEn, ja: homeJa, ko: homeKo, fr: homeFr,
+  fi: homeFi, es: homeEs, pt: homePt, de: homeDe, pl: homePl,
+  it: homeIt, ar: homeAr, da: homeDa, hi: homeHi,
+  th: homeTh, ru: homeRu, el: homeEl, ms: homeMs,
+})
+registerTranslations({
+  zh: adminZh, en: adminEn, ja: adminJa, ko: adminKo, fr: adminFr,
+  fi: adminFi, es: adminEs, pt: adminPt, de: adminDe, pl: adminPl,
+  it: adminIt, ar: adminAr, da: adminDa, hi: adminHi,
+  th: adminTh, ru: adminRu, el: adminEl, ms: adminMs,
+})

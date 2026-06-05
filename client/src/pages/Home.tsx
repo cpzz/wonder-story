@@ -137,15 +137,15 @@ function GuideModal({ book, lang, onClose }: { book: BookItem; lang: LangCode; o
   const { t } = useI18n()
   const isBedtime = book.mode === 'bedtime'
   const cover = isBedtime ? getBedtimeCover(book.theme) : getCover(book.emotion)
-  const getText = (v: { text: string; textEn?: string; textJa?: string; textKo?: string; textFr?: string }): string => {
+  const getText = (v: Record<string, string | undefined>): string => {
     const key = localizedFieldName(lang)
-    const candidate = (v as Record<string, string | undefined>)[key]
+    const candidate = v[key]
     if (candidate?.trim()) return candidate
-    return v.text
+    return v.text ?? ''
   }
-  const getTips = (list: { text: string[]; textEn?: string[]; textJa?: string[]; textKo?: string[]; textFr?: string[] }): string[] => {
+  const getTips = (list: Record<string, string[] | undefined>): string[] => {
     const key = localizedFieldName(lang)
-    const candidate = (list as Record<string, string[] | undefined>)[key]
+    const candidate = list[key]
     if (Array.isArray(candidate) && candidate.length) return candidate
     return list.text
   }
@@ -185,7 +185,7 @@ function GuideModal({ book, lang, onClose }: { book: BookItem; lang: LangCode; o
 type ReaderPage =
   | { type: 'cover' }
   | { type: 'guide' }
-  | { type: 'story'; pageNumber: number; text: string; textEn?: string; textJa?: string; textKo?: string; textFr?: string; imagePrompt?: string }
+  | { type: 'story'; pageNumber: number; text: string; [key: `text${string}`]: string | undefined; imagePrompt?: string }
 
 function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; onDisplayLangChange?: (lang: LangCode) => void; uiLocale: LangCode }) {
   const { t } = useI18n()
@@ -198,10 +198,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
       type: 'story' as const,
       pageNumber: p.pageNumber,
       text: p.text,
-      textEn: p.textEn,
-      textJa: p.textJa,
-      textKo: p.textKo,
-      textFr: p.textFr,
+      ...(p as Record<string, string | undefined>),
       imagePrompt: p.imagePrompt,
     })),
   ]
@@ -283,9 +280,9 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
     }
     // 封面页朗读标题
     if (p.type === 'cover') {
-      return { text: getText({ text: book.title.text, textEn: book.title.textEn, textJa: book.title.textJa, textKo: book.title.textKo, textFr: book.title.textFr }), voice: getStoredVoice(lang) }
+      return { text: getText(book.title as Record<string, string | undefined>), voice: getStoredVoice(lang) }
     }
-    return { text: getText({ text: p.text, textEn: p.textEn, textJa: p.textJa, textKo: p.textKo, textFr: p.textFr }), voice: getStoredVoice(lang) }
+    return { text: getText(p as Record<string, string | undefined>), voice: getStoredVoice(lang) }
   }, [book, voiceLang, voiceEnabled, hasInteracted, getText])
 
   const speak = useCallback((p: ReaderPage) => {
@@ -369,7 +366,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
                   <div className="relative">
                     <div className="text-7xl mb-6 drop-shadow-lg">{cover.emoji}</div>
                     <h2 className="text-white font-bold text-2xl leading-snug drop-shadow">
-                      {getText({ text: book.title.text, textEn: book.title.textEn, textJa: book.title.textJa, textKo: book.title.textKo, textFr: book.title.textFr })}
+                      {getText(book.title as Record<string, string | undefined>)}
                     </h2>
                   </div>
                   <div className="relative">
@@ -389,7 +386,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
             {/* Title below generated cover image */}
             {!coverImageFailed && (
               <h2 className="text-center font-bold text-gray-800 text-lg mt-3 leading-snug">
-                {getText({ text: book.title.text, textEn: book.title.textEn, textJa: book.title.textJa, textKo: book.title.textKo, textFr: book.title.textFr })}
+                {getText(book.title as Record<string, string | undefined>)}
               </h2>
             )}
           </div>
@@ -421,7 +418,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
               <div className="absolute bottom-0 left-0 right-0 px-4 py-4"
                 style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 100%)' }}>
                 <p className="text-white text-lg leading-snug font-medium text-center drop-shadow">
-                  {getText({ text: cur.text, textEn: cur.textEn, textJa: cur.textJa, textKo: cur.textKo, textFr: cur.textFr })}
+                  {getText(cur as Record<string, string | undefined>)}
                 </p>
               </div>
             </div>

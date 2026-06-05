@@ -96,33 +96,25 @@ export interface TroubleInput {
 /**
  * 多语言文本字段。
  * - `text` 必填，存放创作时的主体语言（中文）原文。
- * - 其他语言为可选，缺失时回退到 `text`。
+ * - 其他语言为可选 `textXxx` 字段（Xxx 是 LangCode 对应的 fieldSuffix，如 En/Ja/Ko/Fr/Fi/Es/…），
+ *   缺失时回退到 `text`。
  * - 朗读/界面显示时会按 `LangCode` 优先级取首个非空字段。
  */
 export type LocalizedText = {
   text: string
-  textEn?: string
-  textJa?: string
-  textKo?: string
-  textFr?: string
-} & Record<string, string | undefined>
+  [key: `text${string}`]: string | undefined
+}
 
-/** 单条多语言文本（用于 Guide 的 emotion/message） */
+/** 单条多语言文本（用于 Guide 的 emotion/message / BookItem.title 等） */
 export type LocalizedValue = {
   text: string
-  textEn?: string
-  textJa?: string
-  textKo?: string
-  textFr?: string
+  [key: `text${string}`]: string | undefined
 }
 
 /** 多条多语言文本（用于 Guide.tips） */
 export interface LocalizedList {
   text: string[]
-  textEn?: string[]
-  textJa?: string[]
-  textKo?: string[]
-  textFr?: string[]
+  [key: `text${string}`]: string[] | undefined
 }
 
 export interface StoryPage extends LocalizedText {

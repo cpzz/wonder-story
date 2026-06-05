@@ -6,6 +6,7 @@ const textAdapterRegistry: Record<string, new () => TextModelAdapter> = {
   openai: OpenAITextAdapter,
   deepseek: OpenAITextAdapter,
   qwen: OpenAITextAdapter,
+  alibaba: OpenAITextAdapter,
   ernie: OpenAITextAdapter,
   glm: OpenAITextAdapter,
   moonshot: OpenAITextAdapter,

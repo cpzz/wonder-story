@@ -218,11 +218,13 @@ router.post('/', async (req, res) => {
       langBatches.push(targetLangs.slice(i, i + 2))
     }
 
-    // ── 步骤 1：按批次翻译文本（每批 2 种语言） ──
-    const allTranslations: Record<string, Record<LangCode, string>> = {} // key: 'cover'|'page.1'|'guide.emotion'|... → { en: '...', ja: '...' }
+    // ── 步骤 1：按批次翻译文本（每批 2 种语言，并发执行） ──
+    const pickField = (r: any, code: LangCode): string => {
+      const key = langFieldFor(code)
+      return (r?.[key] ?? '').toString().trim()
+    }
 
-    for (let bi = 0; bi < langBatches.length; bi++) {
-      const batch = langBatches[bi]
+    const translateBatch = async (batch: LangCode[]): Promise<Record<string, Record<LangCode, string>>> => {
       const fieldList = batch.map(langFieldFor).join(' / ')
       const skipClause = skippedLangs.length > 0
         ? `Leave any ${skippedLangs.map((c) => `${langFieldFor(c)} (=${LANG_BY_CODE[c].translateName})`).join(', ')} blank (empty string).`
@@ -237,7 +239,7 @@ Fill in the matching ${fieldList} fields.
 Return the completed JSON only:
 ${JSON.stringify(input, null, 2)}`
 
-      console.log(`[translate] batch ${bi + 1}/${langBatches.length}: translating ${batch.join('+')} ...`)
+      console.log(`[translate] translating ${batch.join('+')} ...`)
       const result = await generateJSON<TranslateBundle>(
         buildTranslateRules(batch),
         userPrompt,
@@ -245,15 +247,12 @@ ${JSON.stringify(input, null, 2)}`
         8192,
       )
 
-      const pickField = (r: any, code: LangCode): string => {
-        const key = langFieldFor(code)
-        return (r?.[key] ?? '').toString().trim()
-      }
+      const out: Record<string, Record<LangCode, string>> = {}
 
       // 封面
-      allTranslations['cover'] = allTranslations['cover'] || {}
+      out['cover'] = {}
       for (const c of batch) {
-        allTranslations['cover'][c] = pickField(result.cover, c)
+        out['cover'][c] = pickField(result.cover, c)
       }
 
       // 正文页
@@ -262,9 +261,9 @@ ${JSON.stringify(input, null, 2)}`
         const matched = resultPages.find((r) => r.pageNumber === page.pageNumber)
         if (matched) {
           const key = `page.${page.pageNumber}`
-          allTranslations[key] = allTranslations[key] || {}
+          out[key] = {}
           for (const c of batch) {
-            allTranslations[key][c] = pickField(matched, c)
+            out[key][c] = pickField(matched, c)
           }
         }
       }
@@ -272,26 +271,24 @@ ${JSON.stringify(input, null, 2)}`
       // 引导页
       for (const section of ['emotion', 'message'] as const) {
         const key = `guide.${section}`
-        allTranslations[key] = allTranslations[key] || {}
+        out[key] = {}
         for (const c of batch) {
-          allTranslations[key][c] = pickField(result.guide?.[section], c)
+          out[key][c] = pickField(result.guide?.[section], c)
         }
       }
       for (let ti = 0; ti < sourceTexts.guideTips.length; ti++) {
         const key = `tips.${ti}`
-        allTranslations[key] = allTranslations[key] || {}
+        out[key] = {}
         for (const c of batch) {
-          allTranslations[key][c] = pickField(result.guide?.tips?.[ti], c)
+          out[key][c] = pickField(result.guide?.tips?.[ti], c)
         }
       }
+
+      return out
     }
 
-    // ── 步骤 2：生成 imagePrompt（独立步骤） ──
-    let coverImagePrompt = ''
-    const pageImagePrompts: Record<number, string> = {}
-
-    if (targetLangs.length > 0 || langBatches.length === 0) {
-      // 有翻译或无需翻译都需要 imagePrompt
+    // ── 步骤 2：生成 imagePrompt（与翻译并发执行） ──
+    const generateImagePrompts = async (): Promise<{ coverImagePrompt: string; pageImagePrompts: Record<number, string> }> => {
       const ipInput = buildImagePromptInput(sourceTexts)
       const ipPrompt = `Read the source text (in "text" field, in Chinese) for each page and fill in "imagePrompt" for the cover and every story page.
 - "text" is the Chinese source text.
@@ -313,12 +310,30 @@ ${JSON.stringify(ipInput, null, 2)}`
         4096,
       )
 
-      coverImagePrompt = (ipResult.cover?.imagePrompt ?? '').toString().trim()
+      const coverImg = (ipResult.cover?.imagePrompt ?? '').toString().trim()
+      const pageImgs: Record<number, string> = {}
       for (const p of ipResult.story?.pages ?? []) {
-        pageImagePrompts[p.pageNumber] = (p.imagePrompt ?? '').toString().trim()
+        pageImgs[p.pageNumber] = (p.imagePrompt ?? '').toString().trim()
       }
-      console.log(`[translate] imagePrompts: cover=${!!coverImagePrompt}, pages=${Object.keys(pageImagePrompts).length}`)
+      console.log(`[translate] imagePrompts: cover=${!!coverImg}, pages=${Object.keys(pageImgs).length}`)
+      return { coverImagePrompt: coverImg, pageImagePrompts: pageImgs }
     }
+
+    // 翻译和 imagePrompt 并发执行
+    const [batchResults, imageResult] = await Promise.all([
+      Promise.all(langBatches.map(translateBatch)),
+      generateImagePrompts(),
+    ])
+
+    // 合并所有翻译批次结果
+    const allTranslations: Record<string, Record<LangCode, string>> = {}
+    for (const batch of batchResults) {
+      for (const [key, langMap] of Object.entries(batch)) {
+        allTranslations[key] = { ...allTranslations[key], ...langMap }
+      }
+    }
+
+    const { coverImagePrompt, pageImagePrompts } = imageResult
 
     // ── 合并所有结果 ──
     const translatedStory: Story = {

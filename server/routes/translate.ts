@@ -163,6 +163,17 @@ Image quality rules (apply to every imagePrompt):
 - Do NOT describe awkward partial crops (e.g. a single floating hand with no context). Full figure or waist-up is fine; **intentional** emotional close-ups on the face are allowed when the story fits.
 - Avoid describing multiple characters in tight overlapping positions that would cause clipping or body part confusion.
 
+Safety & compliance rules (apply to every imagePrompt):
+- **Power dynamics**: NEVER use "towers over", "dominates", "looms over", "authority", "commands", or any language implying power imbalance or oppression between characters. Describe interactions as gentle companionship, standing side-by-side, eye-level warmth.
+- **Body pressure**: NEVER use size differences to create a sense of threat, oppression, or intimidation — even when the story intends a comforting/safe atmosphere.
+- **Gaze direction**: NEVER use "gazing down at", "stares down", "looks down upon" or similar俯视 gaze descriptions. Use "looks at gently", "smiles warmly toward", "meets eyes with".
+- **Physical contact**: NEVER describe embracing, pinning, binding, or other physical interactions that may be mis-flagged by content filters. Use "sits beside", "walks together", "shares a glance" as safe alternatives.
+
+Vocabulary & compliance rules (apply to every imagePrompt):
+- **Tentacles** -> use 'flowing ribbons' or 'graceful trailing arms' instead. The word "tentacles" is highly likely to be flagged by content filters.
+- **No negation descriptions** -> NEVER use "no X" or "without X" to describe what is absent (e.g. "no hard shell or pupils"). Only describe what IS present positively. Example: instead of "no pupils" write "soft glowing eyes with a gentle light".
+- **Avoid sensitive body-part words** -> Do not use "claws", "fangs", "sharp teeth", "blood", "wounds". Use "small paws", "tiny teeth", "gentle smile" instead.
+
 Image style for all imagePrompts: ${style}.`
 }
 

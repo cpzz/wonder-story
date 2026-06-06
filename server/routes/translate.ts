@@ -23,11 +23,11 @@ function targetListItem(c: LangCode): string {
   return `${LANG_BY_CODE[c].translateName} (${langFieldFor(c)})`
 }
 
-/** LLM I/O bundle：封面与正文分离，避免重复 title */
-interface BundleInput {
-  cover: LocalizedJSON & { imagePrompt: string }
+/** 翻译批次 I/O：只含文本字段（不含 imagePrompt） */
+interface TranslateBundle {
+  cover: LocalizedJSON
   story: {
-    pages: ({ pageNumber: number } & LocalizedJSON & { imagePrompt: string })[]
+    pages: ({ pageNumber: number } & LocalizedJSON)[]
   }
   guide: {
     emotion: LocalizedJSON
@@ -36,33 +36,107 @@ interface BundleInput {
   }
 }
 
-function emptyLocalized(text: string): LocalizedJSON {
-  const out: LocalizedJSON = { text }
-  for (const c of LANG_CODES) {
-    if (c === 'zh') continue
-    ;(out as Record<string, string>)[langFieldFor(c)] = ''
+/** imagePrompt 批次 I/O */
+interface ImagePromptBundle {
+  cover: { imagePrompt: string }
+  story: {
+    pages: ({ pageNumber: number; imagePrompt: string })[]
   }
-  return out
 }
 
-/** 根据用户勾选的 bookLangs 动态生成 system prompt 的"目标语言"段落 */
-function buildTargetLanguageRules(targetLangs: LangCode[]): string {
+/** 从 story 中提取中文源文本（始终基于 text 字段） */
+function extractSourceText(
+  story: Story,
+  guide: Guide,
+): {
+  coverText: string
+  pageTexts: { pageNumber: number; text: string }[]
+  guideEmotion: string
+  guideMessage: string
+  guideTips: string[]
+} {
+  const getStr = (obj: Record<string, any> | undefined): string => {
+    return (obj?.text || '').toString().trim()
+  }
+  const getArr = (obj: Record<string, any> | undefined, len: number): string[] => {
+    const arr = obj?.text
+    if (Array.isArray(arr) && arr.length === len) return arr.map((s) => s.toString().trim())
+    return obj?.text || []
+  }
+
+  return {
+    coverText: getStr(story.cover),
+    pageTexts: [...story.pages]
+      .sort((a, b) => a.pageNumber - b.pageNumber)
+      .map((p) => ({ pageNumber: p.pageNumber, text: getStr(p) })),
+    guideEmotion: getStr(guide.emotion),
+    guideMessage: getStr(guide.message),
+    guideTips: getArr(guide.tips, guide.tips?.text?.length || 0),
+  }
+}
+
+/** 构建仅包含源文本 + 目标语言空字段的输入 */
+function buildTranslateInput(
+  sourceTexts: { coverText: string; pageTexts: { pageNumber: number; text: string }[]; guideEmotion: string; guideMessage: string; guideTips: string[] },
+  batchLangs: LangCode[],
+): TranslateBundle {
+  const batchFields = (text: string): LocalizedJSON => {
+    const out: LocalizedJSON = { text }
+    for (const c of batchLangs) {
+      ;(out as Record<string, string>)[langFieldFor(c)] = ''
+    }
+    return out
+  }
+
+  return {
+    cover: batchFields(sourceTexts.coverText),
+    story: {
+      pages: sourceTexts.pageTexts.map((p) => ({
+        pageNumber: p.pageNumber,
+        ...batchFields(p.text),
+      })),
+    },
+    guide: {
+      emotion: batchFields(sourceTexts.guideEmotion),
+      message: batchFields(sourceTexts.guideMessage),
+      tips: sourceTexts.guideTips.map((t) => batchFields(t)),
+    },
+  }
+}
+
+/** 构建 imagePrompt 输入（只有源文本，imagePrompt 为空） */
+function buildImagePromptInput(
+  sourceTexts: { coverText: string; pageTexts: { pageNumber: number; text: string }[] },
+): ImagePromptBundle {
+  return {
+    cover: { imagePrompt: '' },
+    story: {
+      pages: sourceTexts.pageTexts.map((p) => ({
+        pageNumber: p.pageNumber,
+        imagePrompt: '',
+      })),
+    },
+  }
+}
+
+/** 根据目标语言动态生成 system prompt 的"目标语言"段落 */
+function buildTranslateRules(targetLangs: LangCode[]): string {
   if (targetLangs.length === 0) {
-    return `- The user has not selected any target languages. Leave ALL "textEn/textJa/..." fields (except "text") as empty strings.`
+    return `- The source text is in Chinese (field "text"). Leave ALL other textXxx fields empty.`
   }
   const fillList = targetLangs.map((c) => `${LANG_BY_CODE[c].translateName} (${langFieldFor(c)})`).join(', ')
-  return `- Translate the source text (in "text") into the following target languages ONLY: ${fillList}.
-  - "text" (Simplified Chinese) is the source — keep it untouched.
+  return `- The source text is in Chinese (field "text"). Translate it into the following target languages ONLY: ${fillList}.
   - Keep translations short, natural, and warm, suitable for ages 2-10 reading aloud.`
 }
 
-/** System prompt 的固定部分（与语言无关的图像/角色规则） */
-const TRANSLATE_RULES_BASE = `You are a professional children's book translator and illustrator.
+/** imagePrompt 生成的 system prompt */
+function buildImagePromptSystem(styleId?: string): string {
+  const style = getStylePrompt(styleId) ?? DEFAULT_STYLE
+  return `You are a professional children's book illustrator.
 Rules you MUST follow:
-{TARGET_LANG_RULES}
-- Fill in every "imagePrompt" field with a vivid English illustration description for that page. The imagePrompt should be in English even for non-English stories, since it feeds an English image-generation model.
+- Read the source text for each page (in "text" field) and write a vivid English illustration description in the "imagePrompt" field.
+- The imagePrompt should be in English, since it feeds an English image-generation model.
 - Return ONLY valid JSON with the exact same structure as the input (no extra keys, no missing keys).
-- Do NOT change any other fields.
 
 Reference-image tagging (apply to every imagePrompt and cover.imagePrompt):
 - The Character reference block below marks the first up to three **roster-order** characters as **[Image 1 / 图片1]**, **[Image 2 / 图片2]**, **[Image 3 / 图片3]**: **Image N = the N-th character in the cast list** (the 1st character in the list = Image 1, 2nd = Image 2, 3rd = Image 3).
@@ -87,12 +161,9 @@ Image quality rules (apply to every imagePrompt):
 - Describe clear, natural poses with characters in stable, grounded positions. Avoid overlapping limbs, twisted joints, or unnatural body angles.
 - Keep compositions simple and uncluttered. Each character should have enough space to avoid body parts merging or intersecting.
 - Do NOT describe awkward partial crops (e.g. a single floating hand with no context). Full figure or waist-up is fine; **intentional** emotional close-ups on the face are allowed when the story fits.
-- Avoid describing multiple characters in tight overlapping positions that would cause clipping or body part confusion.`
+- Avoid describing multiple characters in tight overlapping positions that would cause clipping or body part confusion.
 
-function buildTranslateSystem(targetLangs: LangCode[], styleId?: string): string {
-  const style = getStylePrompt(styleId) ?? DEFAULT_STYLE
-  const rules = buildTargetLanguageRules(targetLangs)
-  return TRANSLATE_RULES_BASE.replace('{TARGET_LANG_RULES}', rules) + `\n\nImage style for all imagePrompts: ${style}.`
+Image style for all imagePrompts: ${style}.`
 }
 
 function buildCharacterRef(characters: CharacterCard[]): string {
@@ -122,112 +193,169 @@ router.post('/', async (req, res) => {
       characters?: CharacterCard[]
       textLang: string
       illustrationStyleId?: string
-      /** 用户在语言设置里勾选要生成的语言（不传则用全部非中文） */
       bookLangs?: LangCode[]
     } = req.body
 
-    const sortedPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber)
-    const characterRef = buildCharacterRef(characters)
+    const sourceLang: LangCode = 'zh' // 源文始终为中文
+    console.log(`[translate] sourceLang=${sourceLang}, bookLangs=${bookLangs?.join(',') || '(all)'}`)
 
-    // 始终包含中文（源文）；其他目标语言按 bookLangs 过滤
+    // 目标语言 = bookLangs 中除中文外的所有语言
     const effectiveBookLangs: LangCode[] = (() => {
       const requested = (bookLangs && bookLangs.length > 0 ? bookLangs : LANG_CODES.filter((c) => c !== 'zh'))
-      // 强制至少包含中文
-      const set = new Set<LangCode>(['zh', ...requested.filter((c) => c !== 'zh')])
-      return LANG_CODES.filter((c) => set.has(c))
+      return LANG_CODES.filter((c) => requested.includes(c))
     })()
 
     const targetLangs = effectiveBookLangs.filter((c) => c !== 'zh')
     const skippedLangs = LANG_CODES.filter((c) => c !== 'zh' && !targetLangs.includes(c))
-    const targetFieldList = targetLangs.map(langFieldFor).join(' / ') || '(none)'
 
-    const input: BundleInput = {
-      cover: {
-        ...emptyLocalized(story.cover.text),
-        imagePrompt: '',
-      },
-      story: {
-        pages: sortedPages.map((p) => ({
-          pageNumber: p.pageNumber,
-          ...emptyLocalized(p.text),
-          imagePrompt: '',
-        })),
-      },
-      guide: {
-        emotion: emptyLocalized(guide.emotion.text),
-        message: emptyLocalized(guide.message.text),
-        tips: guide.tips.text.map((t) => emptyLocalized(t)),
-      },
+    // 提取中文源文本
+    const sourceTexts = extractSourceText(story, guide)
+    const characterRef = buildCharacterRef(characters)
+
+    /** 把目标语言每 2 个切一批 */
+    const langBatches: LangCode[][] = []
+    for (let i = 0; i < targetLangs.length; i += 2) {
+      langBatches.push(targetLangs.slice(i, i + 2))
     }
 
-    const skipClause = skippedLangs.length > 0
-      ? `Leave any ${skippedLangs.map((c) => `${langFieldFor(c)} (=${LANG_BY_CODE[c].translateName})`).join(', ')} blank (empty string) since the user did not request them.`
-      : `No languages are skipped — fill every non-"text" field.`
+    // ── 步骤 1：按批次翻译文本（每批 2 种语言） ──
+    const allTranslations: Record<string, Record<LangCode, string>> = {} // key: 'cover'|'page.1'|'guide.emotion'|... → { en: '...', ja: '...' }
 
-    const userPrompt = `Translate the source "text" (Simplified Chinese) into the following target languages ONLY: ${targetLangs.map(targetListItem).join(', ') || '(none — skip translation)'}.
+    for (let bi = 0; bi < langBatches.length; bi++) {
+      const batch = langBatches[bi]
+      const fieldList = batch.map(langFieldFor).join(' / ')
+      const skipClause = skippedLangs.length > 0
+        ? `Leave any ${skippedLangs.map((c) => `${langFieldFor(c)} (=${LANG_BY_CODE[c].translateName})`).join(', ')} blank (empty string).`
+        : `No languages are skipped — fill every non-"text" field.`
+
+      const input = buildTranslateInput(sourceTexts, batch)
+
+      const userPrompt = `Translate the source text (in "text" field, in Chinese) into: ${batch.map(targetListItem).join(', ')}.
 ${skipClause}
-Fill in the matching ${targetFieldList} fields, and also fill "imagePrompt" for the cover and every story page (English, vivid illustration description, ≤120 words each; ≤100 words for the cover).
-
-Character reference (strictly follow for every imagePrompt and cover.imagePrompt). [Image N / 图片N] = N-th character in the roster (see system rules). Use matching (image N) /（图片N）tags in prompts:
-${characterRef}
-
-- Each page "imagePrompt": vivid English scene description, under 120 words. For any on-screen character who has [Image N / 图片N] above, include **EnglishName (中文名) (image N)** (same N). Follow character consistency rules in the system prompt.
-- "cover.imagePrompt": under 100 words; same tagging for cover characters who have [Image N / 图片N].
+Fill in the matching ${fieldList} fields.
 
 Return the completed JSON only:
 ${JSON.stringify(input, null, 2)}`
 
-    console.log(`[translate] calling LLM, pages: ${sortedPages.length} characters: ${characters.length} style: ${getStyleName(illustrationStyleId)} bookLangs=[${effectiveBookLangs.join(',')}]`)
-    const result = await generateJSON<BundleInput>(buildTranslateSystem(targetLangs, illustrationStyleId), userPrompt, 'story', 8192)
-    console.log(
-      '[translate] LLM returned cover imagePrompt length:',
-      result.cover?.imagePrompt?.length ?? 0,
-      'first page imagePrompt:',
-      result.story?.pages?.[0]?.imagePrompt?.slice(0, 60),
-    )
+      console.log(`[translate] batch ${bi + 1}/${langBatches.length}: translating ${batch.join('+')} ...`)
+      const result = await generateJSON<TranslateBundle>(
+        buildTranslateRules(batch),
+        userPrompt,
+        'story',
+        8192,
+      )
 
-    const resultPages = [...(result.story?.pages ?? [])].sort((a, b) => a.pageNumber - b.pageNumber)
+      const pickField = (r: any, code: LangCode): string => {
+        const key = langFieldFor(code)
+        return (r?.[key] ?? '').toString().trim()
+      }
 
-    /** 从 LLM 返回的扁平 record 中取目标语言文本（未勾选 → 空串） */
-    const pickField = (r: any, code: LangCode): string => {
-      if (code === 'zh' || !targetLangs.includes(code)) return ''
-      const key = langFieldFor(code)
-      return (r?.[key] ?? '').toString().trim()
+      // 封面
+      allTranslations['cover'] = allTranslations['cover'] || {}
+      for (const c of batch) {
+        allTranslations['cover'][c] = pickField(result.cover, c)
+      }
+
+      // 正文页
+      const resultPages = [...(result.story?.pages ?? [])].sort((a, b) => a.pageNumber - b.pageNumber)
+      for (const page of sourceTexts.pageTexts) {
+        const matched = resultPages.find((r) => r.pageNumber === page.pageNumber)
+        if (matched) {
+          const key = `page.${page.pageNumber}`
+          allTranslations[key] = allTranslations[key] || {}
+          for (const c of batch) {
+            allTranslations[key][c] = pickField(matched, c)
+          }
+        }
+      }
+
+      // 引导页
+      for (const section of ['emotion', 'message'] as const) {
+        const key = `guide.${section}`
+        allTranslations[key] = allTranslations[key] || {}
+        for (const c of batch) {
+          allTranslations[key][c] = pickField(result.guide?.[section], c)
+        }
+      }
+      for (let ti = 0; ti < sourceTexts.guideTips.length; ti++) {
+        const key = `tips.${ti}`
+        allTranslations[key] = allTranslations[key] || {}
+        for (const c of batch) {
+          allTranslations[key][c] = pickField(result.guide?.tips?.[ti], c)
+        }
+      }
     }
 
+    // ── 步骤 2：生成 imagePrompt（独立步骤） ──
+    let coverImagePrompt = ''
+    const pageImagePrompts: Record<number, string> = {}
+
+    if (targetLangs.length > 0 || langBatches.length === 0) {
+      // 有翻译或无需翻译都需要 imagePrompt
+      const ipInput = buildImagePromptInput(sourceTexts)
+      const ipPrompt = `Read the source text (in "text" field, in Chinese) for each page and fill in "imagePrompt" for the cover and every story page.
+- "text" is the Chinese source text.
+- "imagePrompt" must be in English (for image generation).
+- Each page "imagePrompt": vivid English scene description, under 120 words.
+- "cover.imagePrompt": under 100 words.
+- For any on-screen character who has [Image N / 图片N] in the Character reference below, include **EnglishName (中文名) (image N)** (same N).
+
+Character reference:\n${characterRef}
+
+Return the completed JSON only:
+${JSON.stringify(ipInput, null, 2)}`
+
+      console.log('[translate] generating imagePrompts...')
+      const ipResult = await generateJSON<ImagePromptBundle>(
+        buildImagePromptSystem(illustrationStyleId),
+        ipPrompt,
+        'story',
+        4096,
+      )
+
+      coverImagePrompt = (ipResult.cover?.imagePrompt ?? '').toString().trim()
+      for (const p of ipResult.story?.pages ?? []) {
+        pageImagePrompts[p.pageNumber] = (p.imagePrompt ?? '').toString().trim()
+      }
+      console.log(`[translate] imagePrompts: cover=${!!coverImagePrompt}, pages=${Object.keys(pageImagePrompts).length}`)
+    }
+
+    // ── 合并所有结果 ──
     const translatedStory: Story = {
       cover: {
-        text: story.cover.text,
-        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), pickField(result.cover, c)])),
-        imagePrompt: result.cover?.imagePrompt?.trim() ?? '',
+        ...story.cover,
+        text: sourceTexts.coverText, // 确保中文源文正确
+        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), allTranslations['cover']?.[c] ?? ''])),
+        imagePrompt: coverImagePrompt,
       } as Story['cover'],
-      pages: sortedPages.map((p, i) => {
-        const matched = resultPages.find((r) => r.pageNumber === p.pageNumber) ?? resultPages[i]
-        return {
-          ...p,
-          ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), pickField(matched, c)])),
-          imagePrompt: matched?.imagePrompt?.trim() ?? '',
-        } as Story['pages'][number]
-      }),
+      pages: sourceTexts.pageTexts.map((p) => ({
+        pageNumber: p.pageNumber,
+        imagePrompt: pageImagePrompts[p.pageNumber] || '',
+        text: p.text, // 确保中文源文正确
+        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), allTranslations[`page.${p.pageNumber}`]?.[c] ?? ''])),
+      })) as Story['pages'],
     }
 
     const translatedGuide: Guide = {
       emotion: {
-        text: guide.emotion.text,
-        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), pickField(result.guide?.emotion, c)])),
+        ...guide.emotion,
+        text: sourceTexts.guideEmotion,
+        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), allTranslations['guide.emotion']?.[c] ?? ''])),
       } as Guide['emotion'],
       message: {
-        text: guide.message.text,
-        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), pickField(result.guide?.message, c)])),
+        ...guide.message,
+        text: sourceTexts.guideMessage,
+        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), allTranslations['guide.message']?.[c] ?? ''])),
       } as Guide['message'],
       tips: {
-        text: guide.tips.text,
-        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), guide.tips.text.map((_, i) => pickField(result.guide?.tips?.[i], c))])),
+        ...guide.tips,
+        text: sourceTexts.guideTips,
+        ...Object.fromEntries(targetLangs.map((c) => [langFieldFor(c), sourceTexts.guideTips.map((_, i) => allTranslations[`tips.${i}`]?.[c] ?? '')])),
       } as Guide['tips'],
     }
 
     console.log(
-      `[translate] story: cover imagePrompt=${!!translatedStory.cover.imagePrompt}, pages=${translatedStory.pages.length}, emptyPrompts=${translatedStory.pages.filter((p) => !p.imagePrompt).length}`,
+      `[translate] done: cover imagePrompt=${!!translatedStory.cover.imagePrompt}, pages=${translatedStory.pages.length}, emptyPrompts=${translatedStory.pages.filter((p) => !p.imagePrompt).length}, translationBatches=${langBatches.length}`,
     )
 
     res.json({ story: translatedStory, guide: translatedGuide })

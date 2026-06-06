@@ -133,7 +133,8 @@ export default function AdminPage({
     const b = baselineRef.current
     const llmDirty = llm.storyLLMId !== b.llm.storyLLMId || llm.pictureLLMId !== b.llm.pictureLLMId
     const keysDirty = keysSnapshot(keys) !== b.keysSig
-    const bookLangsDirty = JSON.stringify(bookLangs) !== JSON.stringify(b.bookLangs)
+    const normalizeBookLangs = (langs: LangCode[]) => [...new Set(['zh', ...langs])].sort()
+    const bookLangsDirty = JSON.stringify(normalizeBookLangs(bookLangs)) !== JSON.stringify(normalizeBookLangs(b.bookLangs))
     const voicesDirty = voicesSigNow() !== b.voicesSig
     setDirty(llmDirty || keysDirty || bookLangsDirty || voicesDirty)
   }, [open, keys, llm, bookLangs, selectedVoices])
@@ -248,8 +249,9 @@ export default function AdminPage({
           bookLangs: [...bookLangs],
           voicesSig: JSON.stringify(selectedVoices),
         }
-        // 保存 bookLangs 和 voice 选择到 localStorage
-        setBookLangs(bookLangs)
+        // 保存 bookLangs 和 voice 选择到 localStorage（始终包含中文）
+        const finalBookLangs = [...new Set(['zh', ...bookLangs])] as LangCode[]
+        setBookLangs(finalBookLangs)
         for (const l of LANGUAGES) {
           const v = selectedVoices[l.code]
           if (v) localStorage.setItem(`wstory_${l.code}_voice`, v)
@@ -388,9 +390,10 @@ export default function AdminPage({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {LANGUAGES.map((lang) => {
+                      const isZh = lang.code === 'zh'
                       const voices = voicesByLang[lang.code] ?? []
-                      const checked = bookLangs.includes(lang.code)
-                      const isLastChecked = checked && bookLangs.length === 1
+                      const checked = isZh || bookLangs.includes(lang.code)
+                      const isLastChecked = checked && bookLangs.length === 1 && !isZh
                       const currentVoiceName = selectedVoices[lang.code] ?? ''
                       const testPhrases: Record<LangCode, string> = {
                         zh: '测试语音效果',
@@ -414,12 +417,16 @@ export default function AdminPage({
                       }
                       return (
                         <tr key={lang.code} className={checked ? '' : 'opacity-60'}>
-                          {/* 列1：复选框 — 选中后才生成该语言文字、朗读下拉才显示 */}
+                          {/* 列1：复选框 — 中文始终勾选不可取消，其他语言可勾选/取消 */}
                           <td className="px-4 py-3 align-middle bg-white">
-                            <input type="checkbox" checked={checked} disabled={isLastChecked}
-                              onChange={() => toggleBookLang(lang.code)}
-                              className="w-4 h-4 accent-purple-600 cursor-pointer disabled:cursor-not-allowed"
-                              title={t('admin.colBookLang')} />
+                            {isZh ? (
+                              <svg className="w-4 h-4 text-purple-600 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                            ) : (
+                              <input type="checkbox" checked={checked} disabled={isLastChecked}
+                                onChange={() => toggleBookLang(lang.code)}
+                                className="w-4 h-4 accent-purple-600 cursor-pointer disabled:cursor-not-allowed"
+                                title={t('admin.colBookLang')} />
+                            )}
                           </td>
                           {/* 列2：语言名 */}
                           <td className="px-4 py-3 align-middle font-semibold text-gray-800 bg-white whitespace-nowrap">

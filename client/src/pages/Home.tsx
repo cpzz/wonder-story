@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { BookItem, DropdownOptions, Guide, Story, APIKeyView, LLMSettings } from '@/types'
 import { PROTAGONIST_PRESET_OPTIONS } from '@/lib/protagonistPresets'
 import { LANGUAGES, LANG_BY_CODE, localizedFieldName, pickVoiceForLang, getBookLangs, type LangCode } from '@/lib/languages'
-import { useI18n } from '../i18n'
+import { useI18n, translateByKey } from '../i18n'
 import '../i18n/locales'
 import AdminPage from './Admin'
 import { isLatinLocale } from '../i18n'
@@ -371,12 +371,15 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
                   </div>
                   <div className="relative">
                     <div className="flex flex-wrap gap-1.5 mb-2">
-                      {(isBedtime
-                        ? [book.theme ? translateBookField(book.theme, 'theme', t) : t('home.bedtimeStory'), t('common.ageUnit', { age: book.ageGroup })]
-                        : [translateBookField(book.emotion, 'emotion', t), translateBookField(book.scene, 'scene', t), t('common.ageUnit', { age: book.ageGroup })]
-                      ).map((tag) => (
-                        <span key={tag} className="bg-white/20 text-white/90 text-xs px-2.5 py-0.5 rounded-full">{tag}</span>
-                      ))}
+                      {(() => {
+                        const vl = voiceLang === 'off' ? 'zh' : voiceLang
+                        const tags = isBedtime
+                          ? [book.theme ? translateByKey(`theme.${book.theme}`, vl) : translateByKey('home.bedtimeStory', vl), translateByKey('common.ageUnit', vl, { age: book.ageGroup })]
+                          : [translateByKey(`emotion.${book.emotion}`, vl), translateByKey(`scene.${book.scene}`, vl), translateByKey('common.ageUnit', vl, { age: book.ageGroup })]
+                        return tags.map((tag) => (
+                          <span key={tag} className="bg-white/20 text-white/90 text-xs px-2.5 py-0.5 rounded-full">{tag}</span>
+                        ))
+                      })()}
                     </div>
                     <p className="text-white/60 text-xs">{new Date(book.createdAt).toLocaleDateString('zh-CN')}</p>
                   </div>
@@ -540,7 +543,7 @@ function BookReader({ book, onDisplayLangChange, uiLocale }: { book: BookItem; o
           </span>
         </div>
       </div>
-      {guideOpen && <GuideModal book={book} lang={voiceLang === 'off' ? 'zh' : voiceLang} onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <GuideModal book={book} lang={uiLocale} onClose={() => setGuideOpen(false)} />}
     </div>
   )
 }
@@ -1157,7 +1160,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   {(() => {
-                    const titleKey = localizedFieldName(displayLang)
+                    const titleKey = localizedFieldName(locale)
                     const localizedTitle = (book.title as Record<string, string | undefined>)[titleKey]
                     const displayTitle = localizedTitle?.trim() ? localizedTitle : book.title.text
                     return (<>

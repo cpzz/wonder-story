@@ -6,6 +6,19 @@ export type Locale = LangCode
 
 type TranslationMap = Record<string, string>
 
+/** 按指定 LangCode 查 i18n 翻译（带 fallback 链：指定语言 → en → zh → key）。
+ *  用于非 useI18n 上下文场景，如封面标签跟随朗读语言。 */
+export function translateByKey(key: string, lang: LangCode, params?: Record<string, string | number>): string {
+  let value = translations[lang]?.[key]
+  if (value) return interpolate(value, params)
+  const fallbackOrder: Locale[] = lang === 'zh' ? ['en'] : lang === 'en' ? ['zh'] : ['en', 'zh']
+  for (const fb of fallbackOrder) {
+    value = translations[fb]?.[key]
+    if (value) return interpolate(value, params)
+  }
+  return key
+}
+
 /** 所有 18 种 UI 语言的翻译表。zh/en 由 registerTranslations 注入；其余暂留空，
  *  t() 会按 fallback 链 locale → 'en' → 'zh' → key 自动回退。
  *  未来要加更多 UI 文案，只需要在 locales.ts 里再 register 一次即可。 */
